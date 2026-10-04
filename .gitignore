@@ -1,0 +1,23 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# runtime data
+data/
+*.db
+*.db-*
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# editors / os
+.idea/
+.vscode/
+.DS_Store
