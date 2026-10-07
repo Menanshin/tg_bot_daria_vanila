@@ -59,7 +59,7 @@ def load_config() -> Config:
     except ValueError as e:
         raise ConfigError("DIARY_DELAY_MINUTES must be a number (0 disables it)") from e
 
-    contact = os.getenv("CONTACT", "").strip().lstrip("@")
+    contact = os.getenv("CONTACT", "daria_vanilla").strip().lstrip("@")
     if contact.startswith(("https://t.me/", "http://t.me/", "t.me/")):
         contact = contact.split("t.me/", 1)[1].strip("/")
 
