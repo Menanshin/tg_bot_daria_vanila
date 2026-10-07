@@ -122,6 +122,7 @@ async def on_answer(
     await db.finish_session(session.id, result.anxiety, result.avoidance, result.type.value)
     await db.log_event(cb.from_user.id, "quiz_finished")
     await cb.answer(content.t("calculating"))
+    delivery.schedule_final_cta(bot, db, content, config, cb.from_user.id)
 
     # Уже подписан — сразу полный результат, без гейта.
     if await is_subscribed(bot, config.channel, cb.from_user.id):

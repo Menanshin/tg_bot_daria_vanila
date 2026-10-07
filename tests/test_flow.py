@@ -18,6 +18,16 @@ CONTENT = load_content()
 USER_ID = 42
 
 
+@pytest.fixture(autouse=True)
+def cta_calls(monkeypatch):
+    """Таймер финального сообщения не запускаем, а запоминаем, кому он поставлен."""
+    calls = []
+    monkeypatch.setattr(
+        delivery, "schedule_final_cta", lambda bot, db, content, config, uid: calls.append(uid)
+    )
+    return calls
+
+
 @pytest.fixture
 async def db():
     d = Database(":memory:")
@@ -68,11 +78,11 @@ def assert_full_result(bot, cb):
     """Результат: гейт/вопрос удалён, картинка, расшифровка, финальное сообщение."""
     cb.message.delete.assert_awaited()
     bot.send_photo.assert_awaited_once()
-    texts = sent_texts(bot)
-    assert "Твой результат" in texts[-2]
-    assert "В сексе" in texts[-2] and "Точка роста" in texts[-2]
-    assert "Важно помнить" in texts[-2]
-    assert "близость" in texts[-1]
+    text = sent_texts(bot)[-1]
+    assert "Твой результат" in text
+    assert "В сексе" in text and "Точка роста" in text
+    assert "Важно помнить" in text
+    assert "Пиши «близость»" not in text  # финальное сообщение приходит позже, по таймеру
 
 
 async def run_quiz(db, config, bot, value=5):
@@ -187,10 +197,26 @@ async def test_start_quiz_sends_scale_then_first_question(db):
     assert "Вопрос 1 из 10" in second
 
 
+async def test_final_cta_scheduled_after_quiz(db, config, cta_calls):
+    bot = make_bot(ChatMemberStatus.LEFT)
+    await run_quiz(db, config, bot)
+    assert cta_calls == [USER_ID]
+
+
+async def test_final_cta_sent_once_per_quiz(db, config):
+    bot = make_bot(ChatMemberStatus.LEFT)
+    await db.upsert_user(USER_ID, "u", None)
+    since = now_iso()
+    await delivery._cta_later(bot, db, CONTENT, config, USER_ID, 0, since)
+    await delivery._cta_later(bot, db, CONTENT, config, USER_ID, 0, since)
+    assert bot.send_message.await_count == 1
+    assert "Пиши «близость»" in sent_texts(bot)[-1]
+
+
 async def test_final_cta_button_goes_to_contact(db, config):
     bot = make_bot(ChatMemberStatus.MEMBER)
     cfg = replace(config, contact="dasha_sexolog")
-    await run_quiz(db, cfg, bot)
+    await delivery.send_final_cta(bot, USER_ID, CONTENT, cfg)
     kb = bot.send_message.call_args_list[-1].kwargs["reply_markup"]
     url = kb.inline_keyboard[0][0].url
     assert url.startswith("https://t.me/dasha_sexolog?text=")

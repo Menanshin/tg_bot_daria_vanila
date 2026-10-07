@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Coroutine
 from pathlib import Path
+from typing import Any
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError, TelegramForbiddenError
@@ -38,7 +40,7 @@ async def send_full_result(
     bot: Bot, chat_id: int, content: Content, config: Config,
     result_type: AttachmentType, anxiety: int, avoidance: int,
 ) -> None:
-    """Картинка типа → полная расшифровка → финальное сообщение с кнопкой в личку."""
+    """Картинка типа → полная расшифровка. Финальное сообщение — отдельно, по таймеру."""
     image = content.type_image(result_type)
     try:
         sent = await bot.send_photo(chat_id, _input(image))
@@ -56,8 +58,10 @@ async def send_full_result(
     )
     await bot.send_message(chat_id, text, reply_markup=kb, disable_web_page_preview=True)
 
-    cta_text, cta_kb = ui.final_cta_screen(content, config.contact)
-    await bot.send_message(chat_id, cta_text, reply_markup=cta_kb)
+
+async def send_final_cta(bot: Bot, chat_id: int, content: Content, config: Config) -> None:
+    text, kb = ui.final_cta_screen(content, config.contact)
+    await bot.send_message(chat_id, text, reply_markup=kb)
 
 
 async def send_diary(bot: Bot, chat_id: int, content: Content) -> None:
@@ -88,6 +92,41 @@ async def _diary_later(
         log.exception("Failed to send diary to %s", user_id)
 
 
+async def _cta_later(
+    bot: Bot, db: Database, content: Content, config: Config,
+    user_id: int, delay_sec: float, since: str,
+) -> None:
+    await asyncio.sleep(delay_sec)
+    try:
+        # Человек мог пройти тест ещё раз за эти минуты — второй раз не шлём.
+        if await db.has_event(user_id, "cta_sent", since=since):
+            return
+        await send_final_cta(bot, user_id, content, config)
+        await db.log_event(user_id, "cta_sent")
+    except TelegramForbiddenError:
+        log.info("User %s blocked the bot, skipping final message", user_id)
+    except Exception:
+        log.exception("Failed to send final message to %s", user_id)
+
+
+def _spawn(coro: Coroutine[Any, Any, None]) -> None:
+    task = asyncio.create_task(coro)
+    _pending.add(task)
+    task.add_done_callback(_pending.discard)
+
+
+def schedule_final_cta(
+    bot: Bot, db: Database, content: Content, config: Config, user_id: int
+) -> None:
+    """Через CTA_DELAY_MINUTES после прохождения теста — сообщение «Пиши «близость»».
+
+    Таймер живёт в памяти: при перезапуске бота несработавшие таймеры теряются.
+    0 — отправить сразу (без таймера).
+    """
+    delay = max(config.cta_delay_minutes, 0) * 60
+    _spawn(_cta_later(bot, db, content, config, user_id, delay, now_iso()))
+
+
 def schedule_diary(
     bot: Bot, db: Database, content: Content, config: Config, user_id: int
 ) -> None:
@@ -97,8 +136,4 @@ def schedule_diary(
     """
     if config.diary_delay_minutes <= 0:
         return
-    task = asyncio.create_task(
-        _diary_later(bot, db, content, user_id, config.diary_delay_minutes * 60, now_iso())
-    )
-    _pending.add(task)
-    task.add_done_callback(_pending.discard)
+    _spawn(_diary_later(bot, db, content, user_id, config.diary_delay_minutes * 60, now_iso()))

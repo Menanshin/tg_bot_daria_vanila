@@ -22,6 +22,8 @@ class Config:
     contact: str = ""
     # Через сколько минут после /start прислать дневник, если тест не начат. 0 — выключено.
     diary_delay_minutes: float = 0
+    # Через сколько минут после прохождения теста прислать «Пиши «близость»». 0 — сразу.
+    cta_delay_minutes: float = 0
 
     @property
     def channel_url(self) -> str:
@@ -59,6 +61,11 @@ def load_config() -> Config:
     except ValueError as e:
         raise ConfigError("DIARY_DELAY_MINUTES must be a number (0 disables it)") from e
 
+    try:
+        cta_delay_minutes = float(os.getenv("CTA_DELAY_MINUTES", "5"))
+    except ValueError as e:
+        raise ConfigError("CTA_DELAY_MINUTES must be a number (0 = send right away)") from e
+
     contact = os.getenv("CONTACT", "daria_vanilla").strip().lstrip("@")
     if contact.startswith(("https://t.me/", "http://t.me/", "t.me/")):
         contact = contact.split("t.me/", 1)[1].strip("/")
@@ -72,4 +79,5 @@ def load_config() -> Config:
         log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
         contact=contact,
         diary_delay_minutes=diary_delay_minutes,
+        cta_delay_minutes=cta_delay_minutes,
     )
