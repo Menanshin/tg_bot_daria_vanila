@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import html
 import logging
 import re
@@ -11,7 +12,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 
-from bot import ui
+from bot import delivery, ui
 from bot.config import Config
 from bot.content import Content
 from bot.db import Database, Session
@@ -30,6 +31,12 @@ def parse_source(args: str | None) -> str | None:
     return None
 
 
+async def safe_delete(message: Message) -> None:
+    """Убрать гейт/последний вопрос перед результатом. Не вышло — не страшно."""
+    with contextlib.suppress(TelegramBadRequest):
+        await message.delete()
+
+
 async def safe_edit(message: Message, text: str, kb: InlineKeyboardMarkup) -> None:
     try:
         await message.edit_text(text, reply_markup=kb, disable_web_page_preview=True)
@@ -42,7 +49,8 @@ async def safe_edit(message: Message, text: str, kb: InlineKeyboardMarkup) -> No
 
 @router.message(CommandStart())
 async def cmd_start(
-    message: Message, command: CommandObject, db: Database, content: Content
+    message: Message, command: CommandObject,
+    db: Database, content: Content, config: Config, bot: Bot,
 ) -> None:
     user = message.from_user
     if user is None:
@@ -51,28 +59,29 @@ async def cmd_start(
     await db.log_event(user.id, "start")
     text, kb = ui.start_screen(content)
     await message.answer(text, reply_markup=kb)
+    delivery.schedule_diary(bot, db, content, config, user.id)
 
 
 @router.callback_query(ui.StartCb.filter())
 async def on_start_quiz(cb: CallbackQuery, db: Database, content: Content) -> None:
-    await _begin_quiz(cb, db, content, edit=True)
+    await _begin_quiz(cb, db, content)
 
 
 @router.callback_query(ui.RestartCb.filter())
 async def on_restart(cb: CallbackQuery, db: Database, content: Content) -> None:
-    # Результат оставляем в чате, тест начинаем новым сообщением.
-    await _begin_quiz(cb, db, content, edit=False)
+    await _begin_quiz(cb, db, content)
 
 
-async def _begin_quiz(cb: CallbackQuery, db: Database, content: Content, *, edit: bool) -> None:
+async def _begin_quiz(cb: CallbackQuery, db: Database, content: Content) -> None:
+    # Приветствие/результат остаются в чате: ниже — шкала ответов, под ней вопросы
+    # (одно сообщение, которое редактируется).
     user = cb.from_user
     await db.upsert_user(user.id, user.username, None)
     session = await db.new_session(user.id)
     await db.log_event(user.id, "quiz_started")
     text, kb = ui.question_screen(content, session.id, 0)
-    if edit and isinstance(cb.message, Message):
-        await safe_edit(cb.message, text, kb)
-    elif cb.message is not None:
+    if cb.message is not None:
+        await cb.message.answer(content.t("scale_intro"))
         await cb.message.answer(text, reply_markup=kb)
     await cb.answer()
 
@@ -118,17 +127,18 @@ async def on_answer(
     if await is_subscribed(bot, config.channel, cb.from_user.id):
         await db.mark(session.id, "unlocked_at")
         await db.log_event(cb.from_user.id, "unlocked_direct")
-        text, kb = ui.full_screen(
-            content, config.channel, await _bot_username(bot),
+        await safe_delete(cb.message)
+        await delivery.send_full_result(
+            bot, cb.from_user.id, content, config,
             result.type, result.anxiety, result.avoidance,
         )
-    else:
-        await db.mark(session.id, "gate_shown_at")
-        await db.log_event(cb.from_user.id, "gate_shown")
-        text, kb = ui.gate_screen(
-            content, config.channel, config.channel_url,
-            result.type, result.anxiety, result.avoidance,
-        )
+        return
+    await db.mark(session.id, "gate_shown_at")
+    await db.log_event(cb.from_user.id, "gate_shown")
+    text, kb = ui.gate_screen(
+        content, config.channel, config.channel_url,
+        result.type, result.anxiety, result.avoidance,
+    )
     await safe_edit(cb.message, text, kb)
 
 
@@ -151,11 +161,6 @@ async def on_back(
 
 # --- гейт и результат ---
 
-async def _bot_username(bot: Bot) -> str:
-    me = await bot.me()
-    return me.username or ""
-
-
 @router.callback_query(ui.CheckCb.filter())
 async def on_check(
     cb: CallbackQuery, db: Database, content: Content, config: Config, bot: Bot
@@ -172,13 +177,13 @@ async def on_check(
     await db.mark(session.id, "unlocked_at")
     if first_unlock:
         await db.log_event(cb.from_user.id, "unlocked")
-    text, kb = ui.full_screen(
-        content, config.channel, await _bot_username(bot),
+    await cb.answer()
+    if isinstance(cb.message, Message):
+        await safe_delete(cb.message)
+    await delivery.send_full_result(
+        bot, cb.from_user.id, content, config,
         AttachmentType(session.result_type), session.anxiety or 0, session.avoidance or 0,
     )
-    if isinstance(cb.message, Message):
-        await safe_edit(cb.message, text, kb)
-    await cb.answer()
 
 
 @router.message(Command("result"))
@@ -196,22 +201,20 @@ async def cmd_result(
     anxiety, avoidance = session.anxiety or 0, session.avoidance or 0
     if session.unlocked_at or await is_subscribed(bot, config.channel, user.id):
         await db.mark(session.id, "unlocked_at")
-        text, kb = ui.full_screen(
-            content, config.channel, await _bot_username(bot), rtype, anxiety, avoidance
-        )
         await message.answer(content.t("already_full"))
-    else:
-        text, kb = ui.gate_screen(
-            content, config.channel, config.channel_url, rtype, anxiety, avoidance
-        )
+        await delivery.send_full_result(bot, user.id, content, config, rtype, anxiety, avoidance)
+        return
+    text, kb = ui.gate_screen(
+        content, config.channel, config.channel_url, rtype, anxiety, avoidance
+    )
     await message.answer(text, reply_markup=kb, disable_web_page_preview=True)
 
 
 # --- админка ---
 
 TYPE_NAMES = {
-    "secure": "надёжный", "anxious": "тревожный",
-    "avoidant": "избегающий", "disorganized": "тревожно-избегающий",
+    "secure": "безопасная", "anxious": "тревожная",
+    "avoidant": "избегающая", "disorganized": "дезорганизованная",
 }
 
 
@@ -238,6 +241,7 @@ async def cmd_stats(message: Message, db: Database, config: Config) -> None:
         f"Подписались через гейт: {via_gate} ({pct(via_gate, gate)} от гейта)",
         f"Открыли результат всего: {s['unlocked']}",
         f"Получили напоминание: {s['reminded']}",
+        f"Получили дневник: {s['diary_sent']}",
         "",
         "<b>Источники</b> (/start &lt;метка&gt;)",
     ]

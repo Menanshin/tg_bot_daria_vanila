@@ -1,8 +1,10 @@
 import re
 
+from aiogram.types import InlineKeyboardMarkup
+
 from bot.content import load_content
 from bot.scoring import AttachmentType
-from bot.ui import full_screen, gate_screen, question_screen, start_screen
+from bot.ui import final_cta_screen, full_screen, gate_screen, question_screen, start_screen
 
 CONTENT = load_content()
 TG_LIMIT = 4096
@@ -28,11 +30,26 @@ def test_unique_question_ids():
 
 def _all_screens():
     yield start_screen(CONTENT)
+    yield CONTENT.t("scale_intro"), InlineKeyboardMarkup(inline_keyboard=[])
+    yield final_cta_screen(CONTENT, "someone")
     for i in range(len(CONTENT.questions)):
         yield question_screen(CONTENT, 999_999_999, i)
     for t in AttachmentType:
         yield gate_screen(CONTENT, "@vanillapropsy", "https://t.me/vanillapropsy", t, 25, 25)
         yield full_screen(CONTENT, "@vanillapropsy", "some_bot", t, 25, 25)
+
+
+CAPTION_LIMIT = 1024
+
+
+def test_diary_caption_fits():
+    assert len(CONTENT.t("diary")) <= CAPTION_LIMIT
+
+
+def test_media_files_present():
+    for t in AttachmentType:
+        assert CONTENT.type_image(t).is_file()
+    assert CONTENT.diary_path.is_file()
 
 
 def test_screens_fit_telegram_limits():

@@ -104,6 +104,14 @@ class Database:
         )
         await self.conn.commit()
 
+    async def has_event(self, user_id: int, name: str, since: str | None = None) -> bool:
+        async with self.conn.execute(
+            """SELECT 1 FROM events WHERE user_id = ? AND name = ? AND created_at >= ?
+               LIMIT 1""",
+            (user_id, name, since or ""),
+        ) as cur:
+            return await cur.fetchone() is not None
+
     # --- sessions ---
 
     @staticmethod
@@ -215,6 +223,9 @@ class Database:
             "gate_shown": await scalar(users_with.format("gate_shown_at")),
             "unlocked": await scalar(users_with.format("unlocked_at")),
             "reminded": await scalar(users_with.format("reminded_at")),
+            "diary_sent": await scalar(
+                "SELECT COUNT(DISTINCT user_id) FROM events WHERE name = 'diary_sent'"
+            ),
             "unlocked_via_gate": await scalar(
                 """SELECT COUNT(DISTINCT user_id) FROM sessions
                    WHERE gate_shown_at IS NOT NULL AND unlocked_at IS NOT NULL"""

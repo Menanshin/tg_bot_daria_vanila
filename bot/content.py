@@ -14,11 +14,14 @@ CONTENT_DIR = Path(__file__).resolve().parent.parent / "content"
 DIMENSIONS = ("anxiety", "avoidance")
 
 REQUIRED_TEXTS = (
-    "start", "start_button", "question", "back_button", "calculating", "gate",
-    "subscribe_button", "check_button", "not_subscribed", "full_header",
-    "full_footer", "share_button", "share_text", "restart_button",
-    "already_full", "reminder",
+    "start", "start_button", "diary", "diary_filename", "scale_intro", "question",
+    "back_button", "calculating", "gate", "subscribe_button", "check_button",
+    "not_subscribed", "full_header", "full_footer", "share_button", "share_text",
+    "restart_button", "already_full", "final_cta", "final_cta_button",
+    "final_cta_message", "reminder",
 )
+MEDIA_DIR_NAME = "media"
+DIARY_FILE = "diary.pdf"
 
 
 class ContentError(ValueError):
@@ -36,7 +39,7 @@ class Question:
 @dataclass(frozen=True, slots=True)
 class TypeTexts:
     title: str
-    teaser: str
+    description: str
     full: str
 
 
@@ -46,6 +49,14 @@ class Content:
     threshold: int
     texts: dict[str, str]
     types: dict[AttachmentType, TypeTexts]
+    media_dir: Path
+
+    def type_image(self, result_type: AttachmentType) -> Path:
+        return self.media_dir / f"{result_type.value}.jpg"
+
+    @property
+    def diary_path(self) -> Path:
+        return self.media_dir / DIARY_FILE
 
     def t(self, key: str, **kwargs: Any) -> str:
         return self.texts[key].format(**kwargs).strip()
@@ -89,7 +100,7 @@ def load_content(content_dir: Path = CONTENT_DIR) -> Content:
         raw = types_raw[t.value]
         types[t] = TypeTexts(
             title=str(raw["title"]).strip(),
-            teaser=str(raw["teaser"]).strip(),
+            description=str(raw["description"]).strip(),
             full=str(raw["full"]).strip(),
         )
 
@@ -98,9 +109,16 @@ def load_content(content_dir: Path = CONTENT_DIR) -> Content:
     if missing:
         raise ContentError(f"texts.yaml: missing keys {missing}")
 
+    media_dir = content_dir / MEDIA_DIR_NAME
+    expected = [media_dir / f"{t.value}.jpg" for t in AttachmentType] + [media_dir / DIARY_FILE]
+    absent = [p.name for p in expected if not p.is_file()]
+    if absent:
+        raise ContentError(f"content/{MEDIA_DIR_NAME}: missing files {absent}")
+
     return Content(
         questions=questions,
         threshold=int(quiz["threshold"]),
         texts=texts,
         types=types,
+        media_dir=media_dir,
     )

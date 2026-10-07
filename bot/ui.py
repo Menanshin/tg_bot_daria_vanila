@@ -87,9 +87,11 @@ def gate_screen(
     content: Content, channel: str, channel_url: str,
     result_type: AttachmentType, anxiety: int, avoidance: int,
 ) -> tuple[str, InlineKeyboardMarkup]:
+    tt = content.types[result_type]
     text = content.t(
         "gate",
-        teaser=content.types[result_type].teaser,
+        title=tt.title,
+        description=tt.description,
         anxiety_bar=scale_bar(anxiety, content.threshold),
         avoidance_bar=scale_bar(avoidance, content.threshold),
         channel=channel,
@@ -116,7 +118,7 @@ def full_screen(
 ) -> tuple[str, InlineKeyboardMarkup]:
     tt = content.types[result_type]
     text = "\n\n".join([
-        content.t("full_header", title=tt.title),
+        content.t("full_header", title=tt.title, description=tt.description),
         (
             f"Тревожность: {scale_bar(anxiety, content.threshold)}\n"
             f"Избегание: {scale_bar(avoidance, content.threshold)}"
@@ -131,3 +133,14 @@ def full_screen(
         [InlineKeyboardButton(text=content.t("restart_button"), callback_data=RestartCb().pack())],
     ])
     return text, kb
+
+
+def final_cta_screen(content: Content, contact: str) -> tuple[str, InlineKeyboardMarkup | None]:
+    """Финальное сообщение с кнопкой в личку Даши. Без CONTACT — без кнопки."""
+    if not contact:
+        return content.t("final_cta"), None
+    url = f"https://t.me/{contact}?text={quote(content.t('final_cta_message'))}"
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text=content.t("final_cta_button"), url=url)
+    ]])
+    return content.t("final_cta"), kb

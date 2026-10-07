@@ -18,6 +18,10 @@ class Config:
     db_path: str
     reminder_hours: float
     log_level: str
+    # Username Даши для кнопки «Написать «близость»». Пусто — кнопка не показывается.
+    contact: str = ""
+    # Через сколько минут после /start прислать дневник, если тест не начат. 0 — выключено.
+    diary_delay_minutes: float = 0
 
     @property
     def channel_url(self) -> str:
@@ -50,6 +54,15 @@ def load_config() -> Config:
     except ValueError as e:
         raise ConfigError("REMINDER_HOURS must be a number (0 disables reminders)") from e
 
+    try:
+        diary_delay_minutes = float(os.getenv("DIARY_DELAY_MINUTES", "3"))
+    except ValueError as e:
+        raise ConfigError("DIARY_DELAY_MINUTES must be a number (0 disables it)") from e
+
+    contact = os.getenv("CONTACT", "").strip().lstrip("@")
+    if contact.startswith(("https://t.me/", "http://t.me/", "t.me/")):
+        contact = contact.split("t.me/", 1)[1].strip("/")
+
     return Config(
         bot_token=token,
         channel=channel,
@@ -57,4 +70,6 @@ def load_config() -> Config:
         db_path=os.getenv("DB_PATH", "data/bot.db"),
         reminder_hours=reminder_hours,
         log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
+        contact=contact,
+        diary_delay_minutes=diary_delay_minutes,
     )
