@@ -17,6 +17,7 @@ from aiogram.types import (
     Chat,
     ChatMemberLeft,
     Message,
+    ReplyKeyboardMarkup,
     Update,
     User,
 )
@@ -66,6 +67,8 @@ async def env():
     bot = FakeBot()
     yield dp, bot, db
     await db.close()
+    # router — модульный синглтон: отцепляем, чтобы следующий тест мог подключить его заново.
+    router._parent_router = None
 
 
 _ids = iter(range(1, 10_000))
@@ -108,3 +111,43 @@ async def test_full_flow_through_dispatcher(env):
     stats_text = bot.calls[-1].text
     assert "insta_bio: 1" in stats_text
     assert "Увидели гейт: 1" in stats_text
+
+
+async def test_admin_stats_button(env):
+    dp, bot, _ = env
+
+    await dp.feed_update(bot, msg_update("/start"))
+    admin_msgs = [
+        c for c in bot.calls
+        if isinstance(c, SendMessage) and isinstance(c.reply_markup, ReplyKeyboardMarkup)
+    ]
+    assert admin_msgs, "admin should get the stats keyboard on /start"
+    assert admin_msgs[-1].reply_markup.keyboard[0][0].text == ui.STATS_BUTTON
+
+    await dp.feed_update(bot, msg_update(ui.STATS_BUTTON))
+    assert "Воронка" in bot.calls[-1].text
+
+    await dp.feed_update(bot, cb_update(ui.StatsCb().pack()))
+    assert any(isinstance(c, EditMessageText) and "Воронка" in c.text for c in bot.calls)
+
+
+async def test_non_admin_gets_no_stats(env):
+    dp, bot, _ = env
+    stranger = User(id=99, is_bot=False, first_name="X")
+    chat = Chat(id=99, type="private")
+
+    def msg(text: str) -> Update:
+        return Update(update_id=next(_ids), message=Message(
+            message_id=next(_ids), date=datetime.now(UTC), chat=chat,
+            from_user=stranger, text=text,
+        ))
+
+    await dp.feed_update(bot, msg("/start"))
+    assert not any(
+        isinstance(c, SendMessage) and isinstance(c.reply_markup, ReplyKeyboardMarkup)
+        for c in bot.calls
+    )
+    before = len(bot.calls)
+    await dp.feed_update(bot, msg(ui.STATS_BUTTON))
+    await dp.feed_update(bot, msg("/stats"))
+    assert len(bot.calls) == before

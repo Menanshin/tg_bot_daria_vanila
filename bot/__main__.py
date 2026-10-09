@@ -9,7 +9,8 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.types import BotCommand
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import BotCommand, BotCommandScopeChat
 
 from bot.config import load_config
 from bot.content import load_content
@@ -40,10 +41,19 @@ async def main() -> None:
     if problem:
         log.warning("Проверка подписки не будет работать: %s", problem)
 
-    await bot.set_my_commands([
+    commands = [
         BotCommand(command="start", description="Пройти тест"),
         BotCommand(command="result", description="Мой результат"),
-    ])
+    ]
+    await bot.set_my_commands(commands)
+    # Админам — ещё и /stats в меню. Если админ ещё не писал боту, Telegram
+    # вернёт «chat not found»: меню появится после перезапуска, кнопка — после /start.
+    admin_commands = [*commands, BotCommand(command="stats", description="Статистика")]
+    for admin_id in config.admin_ids:
+        try:
+            await bot.set_my_commands(admin_commands, BotCommandScopeChat(chat_id=admin_id))
+        except TelegramBadRequest as e:
+            log.warning("Не удалось задать меню админу %s: %s", admin_id, e)
 
     reminders: asyncio.Task[None] | None = None
     if config.reminder_hours > 0:

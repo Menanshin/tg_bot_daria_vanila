@@ -5,7 +5,12 @@ from __future__ import annotations
 from urllib.parse import quote
 
 from aiogram.filters.callback_data import CallbackData
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+)
 
 from bot.content import Content
 from bot.scoring import AttachmentType
@@ -35,6 +40,13 @@ class CheckCb(CallbackData, prefix="chk"):
 
 class RestartCb(CallbackData, prefix="re"):
     pass
+
+
+class StatsCb(CallbackData, prefix="st"):
+    pass
+
+
+STATS_BUTTON = "📊 Статистика"
 
 
 def progress_bar(done: int, total: int) -> str:
@@ -144,3 +156,20 @@ def final_cta_screen(content: Content, contact: str) -> tuple[str, InlineKeyboar
         InlineKeyboardButton(text=content.t("final_cta_button"), url=url)
     ]])
     return content.t("final_cta"), kb
+
+
+# --- админка ---
+
+def admin_keyboard() -> ReplyKeyboardMarkup:
+    """Постоянная кнопка под полем ввода — видят только админы."""
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=STATS_BUTTON)]],
+        resize_keyboard=True,
+        is_persistent=True,
+    )
+
+
+def stats_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="🔄 Обновить", callback_data=StatsCb().pack())
+    ]])

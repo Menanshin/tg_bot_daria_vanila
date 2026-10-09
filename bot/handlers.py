@@ -1,4 +1,4 @@
-"""Хендлеры: /start, прохождение теста, гейт подписки, результат, /stats."""
+"""Хендлеры: /start, прохождение теста, гейт подписки, результат, статистика для админов."""
 
 from __future__ import annotations
 
@@ -7,10 +7,10 @@ import html
 import logging
 import re
 
-from aiogram import Bot, Router
+from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandObject, CommandStart
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message, User
 
 from bot import delivery, ui
 from bot.config import Config
@@ -59,6 +59,8 @@ async def cmd_start(
     await db.log_event(user.id, "start")
     text, kb = ui.start_screen(content)
     await message.answer(text, reply_markup=kb)
+    if is_admin(user, config):
+        await message.answer(ADMIN_HINT, reply_markup=ui.admin_keyboard())
     delivery.schedule_diary(bot, db, content, config, user.id)
 
 
@@ -223,10 +225,14 @@ def pct(part: int, whole: int) -> str:
     return f"{part / whole * 100:.0f}%" if whole else "—"
 
 
-@router.message(Command("stats"))
-async def cmd_stats(message: Message, db: Database, config: Config) -> None:
-    if message.from_user is None or message.from_user.id not in config.admin_ids:
-        return
+ADMIN_HINT = "Ты админ — кнопка «📊 Статистика» внизу экрана."
+
+
+def is_admin(user: User | None, config: Config) -> bool:
+    return user is not None and user.id in config.admin_ids
+
+
+async def stats_text(db: Database) -> str:
     s = await db.stats()
     users, started, finished = s["users"], s["started"], s["finished"]
     gate, via_gate = s["gate_shown"], s["unlocked_via_gate"]
@@ -253,4 +259,30 @@ async def cmd_stats(message: Message, db: Database, config: Config) -> None:
     by_type = s["by_type"]
     assert isinstance(by_type, list)
     lines += [f"• {TYPE_NAMES.get(t, t)}: {n}" for t, n in by_type] or ["—"]
-    await message.answer("\n".join(lines))
+    return "\n".join(lines)
+
+
+@router.message(Command("stats"))
+@router.message(F.text == ui.STATS_BUTTON)
+async def cmd_stats(message: Message, db: Database, config: Config) -> None:
+    if not is_admin(message.from_user, config):
+        return
+    await message.answer(await stats_text(db), reply_markup=ui.stats_keyboard())
+
+
+@router.message(Command("admin"))
+async def cmd_admin(message: Message, config: Config) -> None:
+    """Вернуть кнопку статистики, если её скрыли."""
+    if not is_admin(message.from_user, config):
+        return
+    await message.answer(ADMIN_HINT, reply_markup=ui.admin_keyboard())
+
+
+@router.callback_query(ui.StatsCb.filter())
+async def on_stats_refresh(cb: CallbackQuery, db: Database, config: Config) -> None:
+    if not is_admin(cb.from_user, config):
+        await cb.answer()
+        return
+    if isinstance(cb.message, Message):
+        await safe_edit(cb.message, await stats_text(db), ui.stats_keyboard())
+    await cb.answer("Обновлено")
