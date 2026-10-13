@@ -12,6 +12,7 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
 )
 
+from bot.booking_ui import book_button
 from bot.content import Content
 from bot.scoring import AttachmentType
 
@@ -46,6 +47,13 @@ class StatsCb(CallbackData, prefix="st"):
     pass
 
 
+class MenuCb(CallbackData, prefix="m"):
+    section: str  # about | reviews
+
+
+ABOUT, REVIEWS = "about", "reviews"
+
+
 STATS_BUTTON = "📊 Статистика"
 
 
@@ -62,11 +70,66 @@ def scale_bar(score: int, threshold: int) -> str:
 
 # --- экраны ---
 
-def start_screen(content: Content) -> tuple[str, InlineKeyboardMarkup]:
-    kb = InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text=content.t("start_button"), callback_data=StartCb().pack())
-    ]])
-    return content.t("start"), kb
+def _menu_button(content: Content, section: str) -> InlineKeyboardButton:
+    return InlineKeyboardButton(
+        text=content.t(f"{section}_button"), callback_data=MenuCb(section=section).pack()
+    )
+
+
+def subscribe_row(content: Content, channel_url: str) -> list[InlineKeyboardButton]:
+    return [InlineKeyboardButton(text=content.t("subscribe_button"), url=channel_url)]
+
+
+def booking_row(content: Content, booking: bool, contact: str) -> list[list[InlineKeyboardButton]]:
+    """Кнопка «Онлайн-запись»: запись в боте, а если она выключена — личка Даши (CONTACT)."""
+    if booking:
+        return [[book_button(content)]]
+    if contact:
+        url = f"https://t.me/{contact}"
+        return [[InlineKeyboardButton(text=content.t("book_button"), url=url)]]
+    return []
+
+
+def start_screen(
+    content: Content, booking: bool = False, contact: str = ""
+) -> tuple[str, InlineKeyboardMarkup]:
+    """Приветствие: тест, онлайн-запись, «Кто такая Дарья?»."""
+    rows = [
+        [InlineKeyboardButton(text=content.t("start_button"), callback_data=StartCb().pack())],
+        *booking_row(content, booking, contact),
+        [_menu_button(content, ABOUT)],
+    ]
+    kb = InlineKeyboardMarkup(inline_keyboard=rows)
+    text = content.t("start")
+    # Подпись автора бота — необязательная: удали строку author в texts.yaml, и её не будет.
+    if content.texts.get("author", "").strip():
+        text += "\n\n" + content.t("author")
+    return text, kb
+
+
+def about_screen(
+    content: Content, channel_url: str, booking: bool = False, contact: str = ""
+) -> tuple[str, InlineKeyboardMarkup]:
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        *booking_row(content, booking, contact),
+        [_menu_button(content, REVIEWS)],
+        subscribe_row(content, channel_url),
+    ])
+    return content.t("about"), kb
+
+
+def reviews_screen(
+    content: Content, channel_url: str, booking: bool = False, contact: str = ""
+) -> tuple[str, InlineKeyboardMarkup]:
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        *booking_row(content, booking, contact),
+        subscribe_row(content, channel_url),
+    ])
+    return content.t("reviews"), kb
+
+
+def quiz_intro_text(content: Content) -> str:
+    return content.t("quiz_intro") + "\n\n" + content.t("scale_intro")
 
 
 def question_screen(
@@ -113,7 +176,7 @@ def gate_screen(
 
 def gate_keyboard(content: Content, channel_url: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=content.t("subscribe_button"), url=channel_url)],
+        subscribe_row(content, channel_url),
         [InlineKeyboardButton(text=content.t("check_button"), callback_data=CheckCb().pack())],
     ])
 
@@ -125,7 +188,7 @@ def share_url(content: Content, bot_username: str) -> str:
 
 
 def full_screen(
-    content: Content, channel: str, bot_username: str,
+    content: Content, channel: str, channel_url: str, bot_username: str,
     result_type: AttachmentType, anxiety: int, avoidance: int,
 ) -> tuple[str, InlineKeyboardMarkup]:
     tt = content.types[result_type]
@@ -143,19 +206,23 @@ def full_screen(
             text=content.t("share_button"), url=share_url(content, bot_username)
         )],
         [InlineKeyboardButton(text=content.t("restart_button"), callback_data=RestartCb().pack())],
+        subscribe_row(content, channel_url),
     ])
     return text, kb
 
 
-def final_cta_screen(content: Content, contact: str) -> tuple[str, InlineKeyboardMarkup | None]:
-    """Финальное сообщение с кнопкой в личку Даши. Без CONTACT — без кнопки."""
-    if not contact:
-        return content.t("final_cta"), None
-    url = f"https://t.me/{contact}?text={quote(content.t('final_cta_message'))}"
-    kb = InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text=content.t("final_cta_button"), url=url)
-    ]])
-    return content.t("final_cta"), kb
+def final_cta_screen(
+    content: Content, contact: str, channel_url: str, booking: bool = False
+) -> tuple[str, InlineKeyboardMarkup]:
+    """Финальное сообщение: запись на созвон, личка Даши (если задан CONTACT), подписка."""
+    rows: list[list[InlineKeyboardButton]] = []
+    if booking:
+        rows.append([book_button(content)])
+    if contact:
+        url = f"https://t.me/{contact}?text={quote(content.t('final_cta_message'))}"
+        rows.append([InlineKeyboardButton(text=content.t("final_cta_button"), url=url)])
+    rows.append(subscribe_row(content, channel_url))
+    return content.t("final_cta"), InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 # --- админка ---

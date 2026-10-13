@@ -57,8 +57,8 @@ async def cmd_start(
         return
     await db.upsert_user(user.id, user.username, parse_source(command.args))
     await db.log_event(user.id, "start")
-    text, kb = ui.start_screen(content)
-    await message.answer(text, reply_markup=kb)
+    text, kb = ui.start_screen(content, booking=config.booking_enabled, contact=config.contact)
+    await message.answer(text, reply_markup=kb, disable_web_page_preview=True)
     if is_admin(user, config):
         await message.answer(ADMIN_HINT, reply_markup=ui.admin_keyboard())
     delivery.schedule_diary(bot, db, content, config, user.id)
@@ -83,9 +83,32 @@ async def _begin_quiz(cb: CallbackQuery, db: Database, content: Content) -> None
     await db.log_event(user.id, "quiz_started")
     text, kb = ui.question_screen(content, session.id, 0)
     if cb.message is not None:
-        await cb.message.answer(content.t("scale_intro"))
+        await cb.message.answer(ui.quiz_intro_text(content))
         await cb.message.answer(text, reply_markup=kb)
     await cb.answer()
+
+
+# --- разделы меню: «Кто такая Дарья?», «Отзывы» ---
+
+@router.callback_query(ui.MenuCb.filter())
+async def on_menu(
+    cb: CallbackQuery, callback_data: ui.MenuCb,
+    db: Database, content: Content, config: Config, bot: Bot,
+) -> None:
+    section, user = callback_data.section, cb.from_user
+    if section not in (ui.ABOUT, ui.REVIEWS) or cb.message is None:
+        await cb.answer()
+        return
+    await db.upsert_user(user.id, user.username, None)
+    await db.log_event(user.id, f"{section}_opened")
+    await cb.answer()
+    if section == ui.REVIEWS:
+        await delivery.send_reviews(bot, user.id, content, config)
+        return
+    text, kb = ui.about_screen(
+        content, config.channel_url, config.booking_enabled, config.contact
+    )
+    await cb.message.answer(text, reply_markup=kb, disable_web_page_preview=True)
 
 
 # --- прохождение ---
@@ -249,6 +272,8 @@ async def stats_text(db: Database) -> str:
         f"Открыли результат всего: {s['unlocked']}",
         f"Получили напоминание: {s['reminded']}",
         f"Получили дневник: {s['diary_sent']}",
+        f"Открыли «Кто такая Дарья?»: {s['about_opened']}",
+        f"Открыли отзывы: {s['reviews_opened']}",
         "",
         "<b>Источники</b> (/start &lt;метка&gt;)",
     ]

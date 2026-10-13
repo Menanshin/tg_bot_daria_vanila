@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 class ConfigError(RuntimeError):
@@ -24,6 +25,15 @@ class Config:
     diary_delay_minutes: float = 0
     # Через сколько минут после прохождения теста прислать «Пиши «близость»». 0 — сразу.
     cta_delay_minutes: float = 0
+    # Telegram ID Даши: ей приходят заявки на созвон, она ведёт расписание. 0 — запись выключена.
+    booking_owner_id: int = 0
+    # Клиенты выбирают время по Москве, Даша видит своё (Бангкок).
+    client_tz: ZoneInfo = field(default_factory=lambda: ZoneInfo("Europe/Moscow"))
+    owner_tz: ZoneInfo = field(default_factory=lambda: ZoneInfo("Asia/Bangkok"))
+
+    @property
+    def booking_enabled(self) -> bool:
+        return self.booking_owner_id != 0
 
     @property
     def channel_url(self) -> str:
@@ -40,6 +50,14 @@ def _parse_admin_ids(raw: str) -> frozenset[int]:
         except ValueError as e:
             raise ConfigError(f"ADMIN_IDS: {part!r} is not a numeric Telegram user id") from e
     return frozenset(ids)
+
+
+def _parse_tz(name: str, default: str) -> ZoneInfo:
+    raw = os.getenv(name, default).strip() or default
+    try:
+        return ZoneInfo(raw)
+    except (ZoneInfoNotFoundError, ValueError) as e:
+        raise ConfigError(f"{name}: unknown time zone {raw!r} (e.g. Europe/Moscow)") from e
 
 
 def load_config() -> Config:
@@ -70,6 +88,12 @@ def load_config() -> Config:
     if contact.startswith(("https://t.me/", "http://t.me/", "t.me/")):
         contact = contact.split("t.me/", 1)[1].strip("/")
 
+    raw_owner = os.getenv("BOOKING_OWNER_ID", "").strip()
+    try:
+        booking_owner_id = int(raw_owner) if raw_owner else 0
+    except ValueError as e:
+        raise ConfigError("BOOKING_OWNER_ID must be a numeric Telegram user id") from e
+
     return Config(
         bot_token=token,
         channel=channel,
@@ -80,4 +104,7 @@ def load_config() -> Config:
         contact=contact,
         diary_delay_minutes=diary_delay_minutes,
         cta_delay_minutes=cta_delay_minutes,
+        booking_owner_id=booking_owner_id,
+        client_tz=_parse_tz("CLIENT_TZ", "Europe/Moscow"),
+        owner_tz=_parse_tz("OWNER_TZ", "Asia/Bangkok"),
     )

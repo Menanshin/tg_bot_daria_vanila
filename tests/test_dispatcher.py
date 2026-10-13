@@ -151,3 +151,66 @@ async def test_non_admin_gets_no_stats(env):
     await dp.feed_update(bot, msg(ui.STATS_BUTTON))
     await dp.feed_update(bot, msg("/stats"))
     assert len(bot.calls) == before
+
+
+async def test_booking_through_dispatcher():
+    """Запись: /book → тип → день → время → подтверждение; Даша задаёт часы через /schedule."""
+    from bot import booking as bk
+    from bot import booking_ui as bui
+    from bot.booking_handlers import router as booking_router
+
+    db = Database(":memory:")
+    await db.connect()
+    # USER (42) — одновременно Даша: так проверяем и её команды, и клиентский путь.
+    config = Config(
+        bot_token="x", channel="@vanillapropsy", admin_ids=frozenset(),
+        db_path=":memory:", reminder_hours=0, log_level="INFO", booking_owner_id=USER.id,
+    )
+    dp = Dispatcher(db=db, content=CONTENT, config=config)
+    dp.include_router(booking_router)
+    dp.include_router(router)
+    bot = FakeBot()
+    try:
+        await dp.feed_update(bot, msg_update("/schedule"))
+        assert "Расписание" in bot.calls[-1].text
+        await dp.feed_update(bot, cb_update(bui.SchedWeekdayCb(wd=2).pack()))
+        await dp.feed_update(bot, msg_update("10-14, 16:00-20:00"))
+        assert "Ср: 10:00–14:00, 16:00–20:00" in bot.calls[-1].text
+        await dp.feed_update(bot, cb_update(bui.SchedWeekdayCb(wd=2).pack()))
+        await dp.feed_update(bot, msg_update("ерунда"))
+        assert "Не понимаю" in bot.calls[-1].text
+        await dp.feed_update(bot, msg_update("/cancel"))
+        assert "ничего не меняю" in bot.calls[-1].text
+
+        await dp.feed_update(bot, msg_update("/start"))
+        start_msg = next(
+            c for c in reversed(bot.calls)
+            if isinstance(c, SendMessage) and c.reply_markup is not None
+            and not isinstance(c.reply_markup, ReplyKeyboardMarkup)
+        )
+        book_cb = start_msg.reply_markup.inline_keyboard[1][0].callback_data
+        await dp.feed_update(bot, cb_update(book_cb))
+        assert "Запись на онлайн-встречу" in [
+            c for c in bot.calls if isinstance(c, SendMessage)
+        ][-1].text
+
+        await dp.feed_update(bot, msg_update("/book"))
+        assert "Запись на онлайн-встречу" in bot.calls[-1].text
+        await dp.feed_update(bot, cb_update(bui.BookKindCb(kind=bk.Kind.FULL).pack()))
+        days_kb = next(
+            c for c in reversed(bot.calls) if isinstance(c, EditMessageText)
+        ).reply_markup
+        await dp.feed_update(bot, cb_update(days_kb.inline_keyboard[0][0].callback_data))
+        times_kb = bot.calls[-2].reply_markup
+        first_time = bui.BookTimeCb.unpack(times_kb.inline_keyboard[0][0].callback_data)
+        await dp.feed_update(bot, cb_update(
+            bui.BookConfirmCb(kind=first_time.kind, at=first_time.at).pack()
+        ))
+        sent = [c for c in bot.calls if isinstance(c, SendMessage)]
+        assert "Новая заявка" in sent[-1].text
+        (b,) = await db.user_bookings(USER.id, bk.utcnow())
+        assert b.status is bk.Status.PENDING
+    finally:
+        await db.close()
+        booking_router._parent_router = None
+        router._parent_router = None

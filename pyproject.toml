@@ -20,3 +20,4 @@ ignore = ["RUF001", "RUF002", "RUF003"]  # кириллица в строках 
 "tests/*" = ["S101", "S106"]
 "bot/handlers.py" = ["S101"]
 "bot/db.py" = ["S101"]
+"bot/booking_handlers.py" = ["S101"]

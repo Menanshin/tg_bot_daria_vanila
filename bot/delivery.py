@@ -54,14 +54,28 @@ async def send_full_result(
 
     me = await bot.me()
     text, kb = ui.full_screen(
-        content, config.channel, me.username or "", result_type, anxiety, avoidance
+        content, config.channel, config.channel_url, me.username or "",
+        result_type, anxiety, avoidance,
     )
     await bot.send_message(chat_id, text, reply_markup=kb, disable_web_page_preview=True)
 
 
 async def send_final_cta(bot: Bot, chat_id: int, content: Content, config: Config) -> None:
-    text, kb = ui.final_cta_screen(content, config.contact)
+    text, kb = ui.final_cta_screen(
+        content, config.contact, config.channel_url, config.booking_enabled
+    )
     await bot.send_message(chat_id, text, reply_markup=kb)
+
+
+async def send_reviews(bot: Bot, chat_id: int, content: Content, config: Config) -> None:
+    """Картинка с отзывами + подпись и кнопки (запись, подписка)."""
+    path = content.reviews_path
+    caption, kb = ui.reviews_screen(
+        content, config.channel_url, config.booking_enabled, config.contact
+    )
+    sent = await bot.send_photo(chat_id, _input(path), caption=caption, reply_markup=kb)
+    if isinstance(sent, Message) and sent.photo:
+        _remember(path, sent.photo[-1].file_id)
 
 
 async def send_diary(bot: Bot, chat_id: int, content: Content) -> None:

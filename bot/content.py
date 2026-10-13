@@ -14,14 +14,24 @@ CONTENT_DIR = Path(__file__).resolve().parent.parent / "content"
 DIMENSIONS = ("anxiety", "avoidance")
 
 REQUIRED_TEXTS = (
-    "start", "start_button", "diary", "diary_filename", "scale_intro", "question",
+    "start", "start_button", "about_button", "reviews_button", "about", "reviews",
+    "quiz_intro", "diary", "diary_filename", "scale_intro", "question",
     "back_button", "calculating", "gate", "subscribe_button", "check_button",
     "not_subscribed", "full_header", "full_footer", "share_button", "share_text",
     "restart_button", "already_full", "final_cta", "final_cta_button",
     "final_cta_message", "reminder",
+    # запись на созвон
+    "book_button", "book_kind_trial", "book_kind_full", "book_menu", "book_my_bookings",
+    "book_status_pending", "book_status_confirmed", "book_pick_day", "book_no_days",
+    "book_pick_time", "book_no_times", "book_confirm", "book_confirm_button",
+    "book_requested", "book_taken", "book_has_active", "book_trial_used", "book_confirmed",
+    "book_declined", "book_expired", "book_cancel_ask", "book_cancel_yes", "book_cancel_no",
+    "book_cancelled", "book_cancel_too_late", "book_cancelled_by_owner", "book_remind_day",
+    "book_remind_hour", "book_unavailable",
 )
 MEDIA_DIR_NAME = "media"
 DIARY_FILE = "diary.pdf"
+REVIEWS_FILE = "reviews.jpg"
 
 
 class ContentError(ValueError):
@@ -57,6 +67,10 @@ class Content:
     @property
     def diary_path(self) -> Path:
         return self.media_dir / DIARY_FILE
+
+    @property
+    def reviews_path(self) -> Path:
+        return self.media_dir / REVIEWS_FILE
 
     def t(self, key: str, **kwargs: Any) -> str:
         return self.texts[key].format(**kwargs).strip()
@@ -110,7 +124,9 @@ def load_content(content_dir: Path = CONTENT_DIR) -> Content:
         raise ContentError(f"texts.yaml: missing keys {missing}")
 
     media_dir = content_dir / MEDIA_DIR_NAME
-    expected = [media_dir / f"{t.value}.jpg" for t in AttachmentType] + [media_dir / DIARY_FILE]
+    expected = [media_dir / f"{t.value}.jpg" for t in AttachmentType] + [
+        media_dir / DIARY_FILE, media_dir / REVIEWS_FILE,
+    ]
     absent = [p.name for p in expected if not p.is_file()]
     if absent:
         raise ContentError(f"content/{MEDIA_DIR_NAME}: missing files {absent}")

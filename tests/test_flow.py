@@ -193,6 +193,7 @@ async def test_start_quiz_sends_scale_then_first_question(db):
     cb = make_cb()
     await handlers.on_start_quiz(cb, db, CONTENT)
     first, second = (c.args[0] for c in cb.message.answer.call_args_list)
+    assert "Узнай свой тип привязанности" in first
     assert "по шкале от <b>1 до 5</b>" in first
     assert "Вопрос 1 из 10" in second
 
@@ -239,3 +240,32 @@ async def test_diary_skipped_when_quiz_started(db, config):
     await handlers.on_start_quiz(make_cb(), db, CONTENT)
     await delivery._diary_later(bot, db, CONTENT, USER_ID, 0, since)
     bot.send_document.assert_not_awaited()
+
+
+async def test_menu_about(db, config):
+    bot = make_bot(ChatMemberStatus.LEFT)
+    cb = make_cb()
+    await handlers.on_menu(cb, ui.MenuCb(section=ui.ABOUT), db, CONTENT, config, bot)
+    assert cb.message.answer.call_args.args[0] == CONTENT.t("about")
+    kb = cb.message.answer.call_args.kwargs["reply_markup"]
+    assert kb.inline_keyboard[-1][0].url == config.channel_url
+    assert (await db.stats())["about_opened"] == 1
+
+
+async def test_menu_reviews_sends_photo(db, config):
+    bot = make_bot(ChatMemberStatus.LEFT)
+    cb = make_cb()
+    await handlers.on_menu(cb, ui.MenuCb(section=ui.REVIEWS), db, CONTENT, config, bot)
+    bot.send_photo.assert_awaited_once()
+    assert bot.send_photo.call_args.kwargs["caption"] == CONTENT.t("reviews")
+    kb = bot.send_photo.call_args.kwargs["reply_markup"]
+    assert kb.inline_keyboard[-1][0].url == config.channel_url
+    assert (await db.stats())["reviews_opened"] == 1
+
+
+async def test_menu_unknown_section_ignored(db, config):
+    bot = make_bot(ChatMemberStatus.LEFT)
+    cb = make_cb()
+    await handlers.on_menu(cb, ui.MenuCb(section="nope"), db, CONTENT, config, bot)
+    cb.message.answer.assert_not_awaited()
+    bot.send_photo.assert_not_awaited()

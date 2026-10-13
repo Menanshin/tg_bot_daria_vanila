@@ -12,6 +12,8 @@ from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import BotCommand, BotCommandScopeChat
 
+from bot.booking_handlers import booking_loop
+from bot.booking_handlers import router as booking_router
 from bot.config import load_config
 from bot.content import load_content
 from bot.db import Database
@@ -35,6 +37,7 @@ async def main() -> None:
 
     bot = Bot(config.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher(db=db, content=content, config=config)
+    dp.include_router(booking_router)
     dp.include_router(router)
 
     problem = await self_check(bot, config.channel)
@@ -45,29 +48,44 @@ async def main() -> None:
         BotCommand(command="start", description="Пройти тест"),
         BotCommand(command="result", description="Мой результат"),
     ]
+    if config.booking_enabled:
+        commands.append(BotCommand(command="book", description="Записаться на созвон"))
     await bot.set_my_commands(commands)
     # Админам — ещё и /stats в меню. Если админ ещё не писал боту, Telegram
     # вернёт «chat not found»: меню появится после перезапуска, кнопка — после /start.
-    admin_commands = [*commands, BotCommand(command="stats", description="Статистика")]
-    for admin_id in config.admin_ids:
+    owner_commands = [
+        BotCommand(command="bookings", description="Записи на созвон"),
+        BotCommand(command="schedule", description="Моё расписание"),
+    ] if config.booking_enabled else []
+    admin_commands = [
+        *commands, BotCommand(command="stats", description="Статистика"), *owner_commands,
+    ]
+    menus = {admin_id: admin_commands for admin_id in config.admin_ids}
+    if config.booking_enabled:
+        menus.setdefault(config.booking_owner_id, [*commands, *owner_commands])
+    for chat_id, menu in menus.items():
         try:
-            await bot.set_my_commands(admin_commands, BotCommandScopeChat(chat_id=admin_id))
+            await bot.set_my_commands(menu, BotCommandScopeChat(chat_id=chat_id))
         except TelegramBadRequest as e:
-            log.warning("Не удалось задать меню админу %s: %s", admin_id, e)
+            log.warning("Не удалось задать меню %s: %s", chat_id, e)
 
     reminders: asyncio.Task[None] | None = None
     if config.reminder_hours > 0:
         reminders = asyncio.create_task(reminder_loop(bot, db, content, config))
+    bookings: asyncio.Task[None] | None = None
+    if config.booking_enabled:
+        bookings = asyncio.create_task(booking_loop(bot, db, content, config))
 
     me = await bot.me()
     log.info("Started @%s, channel %s", me.username, config.channel)
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
-        if reminders:
-            reminders.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await reminders
+        for task in (reminders, bookings):
+            if task:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
         await db.close()
         await bot.session.close()
 
