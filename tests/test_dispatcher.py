@@ -154,14 +154,14 @@ async def test_non_admin_gets_no_stats(env):
 
 
 async def test_booking_through_dispatcher():
-    """Запись: /book → тип → день → время → подтверждение; Даша задаёт часы через /schedule."""
+    """Запись: /book → тип → день → время → подтверждение; Дарья задаёт часы через /schedule."""
     from bot import booking as bk
     from bot import booking_ui as bui
     from bot.booking_handlers import router as booking_router
 
     db = Database(":memory:")
     await db.connect()
-    # USER (42) — одновременно Даша: так проверяем и её команды, и клиентский путь.
+    # USER (42) — одновременно Дарья: так проверяем и её команды, и клиентский путь.
     config = Config(
         bot_token="x", channel="@vanillapropsy", admin_ids=frozenset(),
         db_path=":memory:", reminder_hours=0, log_level="INFO", booking_owner_id=USER.id,

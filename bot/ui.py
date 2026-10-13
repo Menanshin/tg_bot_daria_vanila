@@ -81,7 +81,7 @@ def subscribe_row(content: Content, channel_url: str) -> list[InlineKeyboardButt
 
 
 def booking_row(content: Content, booking: bool, contact: str) -> list[list[InlineKeyboardButton]]:
-    """Кнопка «Онлайн-запись»: запись в боте, а если она выключена — личка Даши (CONTACT)."""
+    """Кнопка «Онлайн-запись»: запись в боте, а если она выключена — личка Дарьи (CONTACT)."""
     if booking:
         return [[book_button(content)]]
     if contact:
@@ -214,7 +214,7 @@ def full_screen(
 def final_cta_screen(
     content: Content, contact: str, channel_url: str, booking: bool = False
 ) -> tuple[str, InlineKeyboardMarkup]:
-    """Финальное сообщение: запись на созвон, личка Даши (если задан CONTACT), подписка."""
+    """Финальное сообщение: запись на созвон, личка Дарьи (если задан CONTACT), подписка."""
     rows: list[list[InlineKeyboardButton]] = []
     if booking:
         rows.append([book_button(content)])

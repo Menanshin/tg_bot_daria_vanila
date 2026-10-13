@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS booking_cells (
 );
 CREATE INDEX IF NOT EXISTS idx_cells_booking ON booking_cells(booking_id);
 
--- Рабочие часы Даши (по её времени). intervals: «600-1140,…», пусто — выходной.
+-- Рабочие часы Дарьи (по её времени). intervals: «600-1140,…», пусто — выходной.
 CREATE TABLE IF NOT EXISTS schedule_week (
     weekday     INTEGER PRIMARY KEY,
     intervals   TEXT NOT NULL
@@ -500,7 +500,7 @@ class Database:
             rows = await cur.fetchall()
         return {int(r[0]) for r in rows}
 
-    # --- расписание Даши ---
+    # --- расписание Дарьи ---
 
     async def load_schedule(self, tz: ZoneInfo) -> Schedule:
         async with self.conn.execute("SELECT weekday, intervals FROM schedule_week") as cur:

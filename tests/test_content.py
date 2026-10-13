@@ -120,7 +120,7 @@ def test_start_screen_buttons():
     assert book_btn.callback_data == BookMenuCb().pack()
     assert about_btn.callback_data == about
 
-    # Запись выключена, но есть CONTACT — кнопка ведёт в личку Даши.
+    # Запись выключена, но есть CONTACT — кнопка ведёт в личку Дарьи.
     _, kb = start_screen(CONTENT, contact="dasha")
     assert kb.inline_keyboard[1][0].url == "https://t.me/dasha"
 

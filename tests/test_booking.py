@@ -1,4 +1,4 @@
-"""Запись на созвон: слоты, окно между записями, гонки, подтверждение Даши, отмена."""
+"""Запись на созвон: слоты, окно между записями, гонки, подтверждение Дарьи, отмена."""
 
 import asyncio
 from datetime import UTC, datetime, timedelta
@@ -279,7 +279,7 @@ async def test_client_cancel_rules(db, config, clock):
     assert "30 минут" in cb.answer.call_args.args[0]
     assert (await db.get_booking(b.id)).status is Status.PENDING
 
-    # За 30 минут — можно, Даша получает уведомление.
+    # За 30 минут — можно, Дарья получает уведомление.
     clock.now = msk(13, 14, 30)
     bot.send_message.reset_mock()
     await bh.on_client_cancel(make_cb(), bui.BookCancelCb(id=b.id, sure=True),

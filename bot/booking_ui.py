@@ -1,4 +1,4 @@
-"""Экраны и клавиатуры записи на созвон: для клиента (по МСК) и для Даши (по её времени)."""
+"""Экраны и клавиатуры записи на созвон: для клиента (по МСК) и для Дарьи (по её времени)."""
 
 from __future__ import annotations
 
@@ -78,7 +78,7 @@ class SchedDatesCb(CallbackData, prefix="schd"):
 
 
 class SchedDateCb(CallbackData, prefix="schdd"):
-    day: str  # YYYYMMDD по времени Даши
+    day: str  # YYYYMMDD по времени Дарьи
 
 
 class SchedDateActCb(CallbackData, prefix="schda"):
@@ -111,7 +111,7 @@ def book_button(content: Content) -> InlineKeyboardButton:
 
 
 def subscribe_keyboard(content: Content, channel_url: str) -> InlineKeyboardMarkup:
-    """После заявки и после подтверждения — подписка на канал Даши."""
+    """После заявки и после подтверждения — подписка на канал Дарьи."""
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text=content.t("subscribe_button"), url=channel_url)
     ]])
@@ -227,7 +227,7 @@ def cancel_ask_screen(content: Content, b: Booking, tz: ZoneInfo) -> Screen:
     return text, kb
 
 
-# --- Даша ---
+# --- Дарья ---
 
 KIND_SHORT = {Kind.TRIAL: "Пробная · 15 мин", Kind.FULL: "Консультация · 60 мин"}
 STATUS_LINE = {

@@ -1,4 +1,4 @@
-"""Запись на созвон: клиентская часть (/book), решения и расписание Даши, фоновые задачи."""
+"""Запись на созвон: клиентская часть (/book), решения и расписание Дарьи, фоновые задачи."""
 
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ async def _send(
 
 
 def is_owner(user: User | None, config: Config) -> bool:
-    """Расписанием и заявками управляет Даша; админы — тоже (на случай помощи)."""
+    """Расписанием и заявками управляет Дарья; админы — тоже (на случай помощи)."""
     return user is not None and (
         user.id == config.booking_owner_id or user.id in config.admin_ids
     )
@@ -80,7 +80,7 @@ async def _owner_text(db: Database, config: Config, b: Booking, header: str) -> 
 
 
 async def _update_owner_message(bot: Bot, db: Database, config: Config, b: Booking) -> None:
-    """Обновить исходное уведомление у Даши: убрать кнопки, показать итог."""
+    """Обновить исходное уведомление у Дарьи: убрать кнопки, показать итог."""
     if not b.owner_msg_id:
         return
     text = await _owner_text(db, config, b, "Заявка на созвон")
@@ -215,7 +215,7 @@ async def on_confirm(
         bui.button("← Выбрать другое время", bui.BookDayCb(kind=kind, day=bui.day_key(day)))
     ]])
 
-    # Время могло «уехать»: прошло больше 2 ч до начала, Даша закрыла день, слот заняли.
+    # Время могло «уехать»: прошло больше 2 ч до начала, Дарья закрыла день, слот заняли.
     # Повторная проверка по расписанию + атомарная вставка ячеек ниже.
     if start not in await free_starts(db, config, kind, now):
         await _edit(cb.message, content.t("book_taken"), retry_kb)
@@ -292,7 +292,7 @@ async def on_client_cancel(
                 await _owner_text(db, config, b, "✖ Клиент отменил запись"))
 
 
-# --- Даша: заявки ---
+# --- Дарья: заявки ---
 
 async def _owner_list(db: Database, config: Config) -> bui.Screen:
     now = bk.utcnow()
@@ -396,7 +396,7 @@ async def on_owner_cancel(
     await _edit(cb.message, text, kb)
 
 
-# --- Даша: расписание ---
+# --- Дарья: расписание ---
 
 async def _schedule(db: Database, config: Config) -> bui.Screen:
     schedule = await db.load_schedule(config.owner_tz)

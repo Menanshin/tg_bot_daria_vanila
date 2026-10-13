@@ -25,7 +25,7 @@ HORIZON = timedelta(days=30)        # насколько вперёд можно
 MIN_LEAD = timedelta(hours=2)       # минимум до начала встречи в момент записи
 CANCEL_BEFORE = timedelta(minutes=30)  # клиент может отменить не позже чем за …
 GAP = timedelta(hours=1)            # минимальное окно между записями
-HOLD = timedelta(hours=24)          # сколько слот ждёт подтверждения Даши
+HOLD = timedelta(hours=24)          # сколько слот ждёт подтверждения Дарьи
 STEP_MINUTES = 30                   # шаг начала слотов: 10:00, 10:30, 11:00 …
 CELL = timedelta(minutes=15)        # размер ячейки занятости
 
@@ -40,10 +40,10 @@ class Kind(StrEnum):
 
 
 class Status(StrEnum):
-    PENDING = "pending"              # ждёт подтверждения Даши, слот занят
+    PENDING = "pending"              # ждёт подтверждения Дарьи, слот занят
     CONFIRMED = "confirmed"
-    DECLINED = "declined"            # Даша отклонила
-    EXPIRED = "expired"              # Даша не ответила за HOLD
+    DECLINED = "declined"            # Дарья отклонила
+    EXPIRED = "expired"              # Дарья не ответила за HOLD
     CANCELLED = "cancelled"          # отменил клиент
     CANCELLED_BY_OWNER = "cancelled_by_owner"
 
@@ -66,7 +66,7 @@ def from_ts(value: int) -> datetime:
 
 # --- рабочие часы ---
 
-Interval = tuple[int, int]  # минуты от полуночи по времени Даши: (600, 1140) = 10:00–19:00
+Interval = tuple[int, int]  # минуты от полуночи по времени Дарьи: (600, 1140) = 10:00–19:00
 
 _TIME_RE = re.compile(r"^(\d{1,2})(?::(\d{2}))?$")
 DAY_OFF_WORDS = {"выходной", "нет", "-", "—", "0"}
@@ -141,7 +141,7 @@ def _hm(minutes: int) -> str:
 
 @dataclass(frozen=True, slots=True)
 class Schedule:
-    """Недельный шаблон + особые даты. Всё по времени Даши."""
+    """Недельный шаблон + особые даты. Всё по времени Дарьи."""
 
     week: dict[int, list[Interval]]          # 0 = понедельник
     dates: dict[date, list[Interval]]        # переопределение на конкретный день
@@ -203,7 +203,7 @@ def group_by_day(starts: list[datetime], tz: ZoneInfo) -> dict[date, list[dateti
 
 
 def hold_until(now: datetime, start: datetime) -> datetime:
-    """Слот ждёт Дашу сутки, но не дольше начала самой встречи."""
+    """Слот ждёт Дарью сутки, но не дольше начала самой встречи."""
     return min(now + HOLD, start)
 
 

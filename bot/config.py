@@ -19,15 +19,15 @@ class Config:
     db_path: str
     reminder_hours: float
     log_level: str
-    # Username Даши для кнопки «Написать «близость»». Пусто — кнопка не показывается.
+    # Username Дарьи для кнопки «Написать «близость»». Пусто — кнопка не показывается.
     contact: str = ""
     # Через сколько минут после /start прислать дневник, если тест не начат. 0 — выключено.
     diary_delay_minutes: float = 0
     # Через сколько минут после прохождения теста прислать «Пиши «близость»». 0 — сразу.
     cta_delay_minutes: float = 0
-    # Telegram ID Даши: ей приходят заявки на созвон, она ведёт расписание. 0 — запись выключена.
+    # Telegram ID Дарьи: ей приходят заявки на созвон, она ведёт расписание. 0 — запись выключена.
     booking_owner_id: int = 0
-    # Клиенты выбирают время по Москве, Даша видит своё (Бангкок).
+    # Клиенты выбирают время по Москве, Дарья видит своё (Бангкок).
     client_tz: ZoneInfo = field(default_factory=lambda: ZoneInfo("Europe/Moscow"))
     owner_tz: ZoneInfo = field(default_factory=lambda: ZoneInfo("Asia/Bangkok"))
 
