@@ -215,7 +215,7 @@ async def on_confirm(
         bui.button("← Выбрать другое время", bui.BookDayCb(kind=kind, day=bui.day_key(day)))
     ]])
 
-    # Время могло «уехать»: прошло больше 2 ч до начала, Дарья закрыла день, слот заняли.
+    # Время могло «уехать»: до начала осталось меньше 3 ч, Дарья закрыла день, слот заняли.
     # Повторная проверка по расписанию + атомарная вставка ячеек ниже.
     if start not in await free_starts(db, config, kind, now):
         await _edit(cb.message, content.t("book_taken"), retry_kb)

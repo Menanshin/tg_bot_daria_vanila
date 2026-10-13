@@ -22,7 +22,7 @@ from zoneinfo import ZoneInfo
 # --- правила (меняются здесь) ---
 
 HORIZON = timedelta(days=30)        # насколько вперёд можно записаться
-MIN_LEAD = timedelta(hours=2)       # минимум до начала встречи в момент записи
+MIN_LEAD = timedelta(hours=3)       # минимум до начала встречи в момент записи
 CANCEL_BEFORE = timedelta(minutes=30)  # клиент может отменить не позже чем за …
 GAP = timedelta(hours=1)            # минимальное окно между записями
 HOLD = timedelta(hours=24)          # сколько слот ждёт подтверждения Дарьи

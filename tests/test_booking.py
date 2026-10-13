@@ -84,11 +84,11 @@ async def test_slots_are_shown_in_moscow_time(db):
     assert all(s.astimezone(MSK).minute in (0, 30) for s in starts)
 
 
-async def test_minimum_two_hours_before_start(db):
+async def test_minimum_three_hours_before_start(db):
     starts = await free(db, Kind.TRIAL)
-    # Сейчас 12:00 МСК — первое окно сегодня не раньше 14:00 МСК.
-    assert min(starts) == msk(12, 14)
-    assert msk(12, 13, 30) not in starts
+    # Сейчас 12:00 МСК — первое окно сегодня не раньше 15:00 МСК.
+    assert min(starts) == msk(12, 15)
+    assert msk(12, 14, 30) not in starts
 
 
 async def test_horizon_is_one_month(db):
