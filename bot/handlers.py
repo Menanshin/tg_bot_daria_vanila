@@ -1,4 +1,4 @@
-"""Хендлеры: /start, прохождение теста, гейт подписки, результат, статистика для админов."""
+"""Хендлеры: /start, /test, прохождение теста, гейт подписки, результат, статистика для админов."""
 
 from __future__ import annotations
 
@@ -64,28 +64,36 @@ async def cmd_start(
     delivery.schedule_diary(bot, db, content, config, user.id)
 
 
+@router.message(Command("test"))
+async def cmd_test(message: Message, db: Database, content: Content) -> None:
+    if message.from_user is not None:
+        await _begin_quiz(message.from_user, message, db, content)
+
+
 @router.callback_query(ui.StartCb.filter())
 async def on_start_quiz(cb: CallbackQuery, db: Database, content: Content) -> None:
-    await _begin_quiz(cb, db, content)
+    await _begin_quiz(cb.from_user, cb.message, db, content)
+    await cb.answer()
 
 
 @router.callback_query(ui.RestartCb.filter())
 async def on_restart(cb: CallbackQuery, db: Database, content: Content) -> None:
-    await _begin_quiz(cb, db, content)
+    await _begin_quiz(cb.from_user, cb.message, db, content)
+    await cb.answer()
 
 
-async def _begin_quiz(cb: CallbackQuery, db: Database, content: Content) -> None:
+async def _begin_quiz(
+    user: User, message: Message | None, db: Database, content: Content
+) -> None:
     # Приветствие/результат остаются в чате: ниже — шкала ответов, под ней вопросы
     # (одно сообщение, которое редактируется).
-    user = cb.from_user
     await db.upsert_user(user.id, user.username, None)
     session = await db.new_session(user.id)
     await db.log_event(user.id, "quiz_started")
     text, kb = ui.question_screen(content, session.id, 0)
-    if cb.message is not None:
-        await cb.message.answer(ui.quiz_intro_text(content))
-        await cb.message.answer(text, reply_markup=kb)
-    await cb.answer()
+    if message is not None:
+        await message.answer(ui.quiz_intro_text(content))
+        await message.answer(text, reply_markup=kb)
 
 
 # --- разделы меню: «Кто такая Дарья?», «Отзывы» ---

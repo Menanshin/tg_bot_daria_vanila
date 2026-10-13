@@ -45,7 +45,8 @@ async def main() -> None:
         log.warning("Проверка подписки не будет работать: %s", problem)
 
     commands = [
-        BotCommand(command="start", description="Пройти тест"),
+        BotCommand(command="start", description="Запуск бота"),
+        BotCommand(command="test", description="Пройти тест"),
         BotCommand(command="result", description="Мой результат"),
     ]
     if config.booking_enabled:

@@ -113,6 +113,16 @@ async def test_full_flow_through_dispatcher(env):
     assert "Увидели гейт: 1" in stats_text
 
 
+async def test_test_command_starts_quiz(env):
+    dp, bot, db = env
+    await dp.feed_update(bot, msg_update("/test"))
+    session = await db.latest_session(USER.id)
+    assert session is not None and session.answers == []
+    sent = [c for c in bot.calls if isinstance(c, SendMessage)]
+    assert len(sent) == 2, "intro + first question"
+    assert sent[-1].reply_markup is not None
+
+
 async def test_admin_stats_button(env):
     dp, bot, _ = env
 
