@@ -168,7 +168,7 @@ def days_screen(
     page = max(0, min(page, pages - 1))
     chunk = ordered[page * DAYS_PER_PAGE:(page + 1) * DAYS_PER_PAGE]
     buttons = [
-        button(f"{bk.fmt_short_day(d)} · {len(days[d])}", BookDayCb(kind=kind, day=day_key(d)))
+        button(bk.fmt_short_day(d), BookDayCb(kind=kind, day=day_key(d)))
         for d in chunk
     ]
     rows = _rows(buttons, 3)
