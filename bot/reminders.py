@@ -39,6 +39,7 @@ async def send_due_reminders(bot: Bot, db: Database, content: Content, config: C
             await db.log_event(session.user_id, "reminder_sent")
         except TelegramForbiddenError:
             log.info("User %s blocked the bot, skipping reminder", session.user_id)
+            await db.set_blocked(session.user_id, True)
         except TelegramRetryAfter as e:
             log.warning("Flood control, sleeping %s s", e.retry_after)
             await asyncio.sleep(e.retry_after)

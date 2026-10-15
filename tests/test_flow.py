@@ -269,3 +269,36 @@ async def test_menu_unknown_section_ignored(db, config):
     await handlers.on_menu(cb, ui.MenuCb(section="nope"), db, CONTENT, config, bot)
     cb.message.answer.assert_not_awaited()
     bot.send_photo.assert_not_awaited()
+
+
+async def test_blocked_counted_once_and_unblock(db):
+    await db.upsert_user(1, "a", None)
+    await db.upsert_user(2, "b", None)
+    await db.set_blocked(1, True)
+    await db.set_blocked(1, True)  # повторная ошибка отправки не плодит событий
+    s = await db.stats()
+    assert (s["blocked"], s["blocked_ever"], s["blocked_24h"]) == (1, 1, 1)
+    await db.set_blocked(1, False)
+    s = await db.stats()
+    assert (s["blocked"], s["blocked_ever"]) == (0, 1)
+
+
+async def test_migration_adds_blocked_column(tmp_path):
+    import sqlite3
+
+    from bot.db import Database
+
+    path = tmp_path / "old.db"
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "CREATE TABLE users (user_id INTEGER PRIMARY KEY, username TEXT,"
+            " source TEXT, created_at TEXT NOT NULL)"
+        )
+        conn.execute("INSERT INTO users VALUES (7, 'x', NULL, '2026-01-01T00:00:00+00:00')")
+    old = Database(str(path))
+    await old.connect()
+    try:
+        await old.set_blocked(7, True)
+        assert (await old.stats())["blocked"] == 1
+    finally:
+        await old.close()

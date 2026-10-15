@@ -102,6 +102,7 @@ async def _diary_later(
         await db.log_event(user_id, "diary_sent")
     except TelegramForbiddenError:
         log.info("User %s blocked the bot, skipping diary", user_id)
+        await db.set_blocked(user_id, True)
     except Exception:
         log.exception("Failed to send diary to %s", user_id)
 
@@ -119,6 +120,7 @@ async def _cta_later(
         await db.log_event(user_id, "cta_sent")
     except TelegramForbiddenError:
         log.info("User %s blocked the bot, skipping final message", user_id)
+        await db.set_blocked(user_id, True)
     except Exception:
         log.exception("Failed to send final message to %s", user_id)
 

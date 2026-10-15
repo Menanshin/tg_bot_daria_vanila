@@ -9,8 +9,15 @@ import re
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
-from aiogram.filters import Command, CommandObject, CommandStart
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message, User
+from aiogram.filters import (
+    KICKED,
+    MEMBER,
+    ChatMemberUpdatedFilter,
+    Command,
+    CommandObject,
+    CommandStart,
+)
+from aiogram.types import CallbackQuery, ChatMemberUpdated, InlineKeyboardMarkup, Message, User
 
 from bot import delivery, ui
 from bot.config import Config
@@ -43,6 +50,22 @@ async def safe_edit(message: Message, text: str, kb: InlineKeyboardMarkup) -> No
     except TelegramBadRequest as e:
         if "message is not modified" not in str(e):
             raise
+
+
+# --- блокировка бота ---
+# Telegram сам присылает my_chat_member, когда человек блокирует бота в личке
+# (статус kicked) и когда разблокирует (member). Чаты и каналы сюда не попадают.
+
+@router.my_chat_member(F.chat.type == "private", ChatMemberUpdatedFilter(KICKED))
+async def on_bot_blocked(event: ChatMemberUpdated, db: Database) -> None:
+    await db.upsert_user(event.from_user.id, event.from_user.username, None)
+    await db.set_blocked(event.from_user.id, True)
+
+
+@router.my_chat_member(F.chat.type == "private", ChatMemberUpdatedFilter(MEMBER))
+async def on_bot_unblocked(event: ChatMemberUpdated, db: Database) -> None:
+    await db.upsert_user(event.from_user.id, event.from_user.username, None)
+    await db.set_blocked(event.from_user.id, False)
 
 
 # --- /start ---
@@ -263,6 +286,15 @@ def is_admin(user: User | None, config: Config) -> bool:
     return user is not None and user.id in config.admin_ids
 
 
+def blocked_line(s: dict[str, object]) -> str:
+    blocked, ever, users = s["blocked"], s["blocked_ever"], s["users"]
+    assert isinstance(blocked, int) and isinstance(ever, int) and isinstance(users, int)
+    line = f"Заблокировали бота: {blocked} ({pct(blocked, users)}, за 24 ч: {s['blocked_24h']})"
+    if ever > blocked:
+        line += f", вернулись: {ever - blocked}"
+    return line
+
+
 async def stats_text(db: Database) -> str:
     s = await db.stats()
     users, started, finished = s["users"], s["started"], s["finished"]
@@ -282,6 +314,7 @@ async def stats_text(db: Database) -> str:
         f"Получили дневник: {s['diary_sent']}",
         f"Открыли «Кто такая Дарья?»: {s['about_opened']}",
         f"Открыли отзывы: {s['reviews_opened']}",
+        blocked_line(s),
         "",
         "<b>Источники</b> (/start &lt;метка&gt;)",
     ]

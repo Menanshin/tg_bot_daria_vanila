@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS users (
     user_id     INTEGER PRIMARY KEY,
     username    TEXT,
     source      TEXT,
-    created_at  TEXT NOT NULL
+    created_at  TEXT NOT NULL,
+    blocked_at  TEXT            -- когда заблокировал бота; NULL — не блокировал или вернулся
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -157,7 +158,15 @@ class Database:
         self._conn.row_factory = aiosqlite.Row
         await self._conn.execute("PRAGMA journal_mode=WAL")
         await self._conn.executescript(SCHEMA)
+        await self._migrate()
         await self._conn.commit()
+
+    async def _migrate(self) -> None:
+        """Добавить колонки, которых нет в базах, созданных старой версией."""
+        async with self.conn.execute("PRAGMA table_info(users)") as cur:
+            columns = {row["name"] for row in await cur.fetchall()}
+        if "blocked_at" not in columns:
+            await self.conn.execute("ALTER TABLE users ADD COLUMN blocked_at TEXT")
 
     async def close(self) -> None:
         if self._conn is not None:
@@ -193,6 +202,26 @@ class Database:
                 """,
                 (user_id, username, source, now_iso()),
             )
+
+    async def set_blocked(self, user_id: int, blocked: bool) -> None:
+        """Отметить, что человек заблокировал бота (или разблокировал). Повтор не плодит событий."""
+        async with self.write() as conn:
+            if blocked:
+                cur = await conn.execute(
+                    "UPDATE users SET blocked_at = ? WHERE user_id = ? AND blocked_at IS NULL",
+                    (now_iso(), user_id),
+                )
+            else:
+                cur = await conn.execute(
+                    "UPDATE users SET blocked_at = NULL"
+                    " WHERE user_id = ? AND blocked_at IS NOT NULL",
+                    (user_id,),
+                )
+            if cur.rowcount:
+                await conn.execute(
+                    "INSERT INTO events (user_id, name, created_at) VALUES (?, ?, ?)",
+                    (user_id, "blocked" if blocked else "unblocked", now_iso()),
+                )
 
     async def get_setting(self, key: str) -> str | None:
         async with self.conn.execute("SELECT value FROM settings WHERE key = ?", (key,)) as cur:
@@ -333,7 +362,15 @@ class Database:
             return [(str(r[0]), int(r[1])) for r in rows]
 
         users_with = "SELECT COUNT(DISTINCT user_id) FROM sessions WHERE {} IS NOT NULL"
+        day_ago = (datetime.now(UTC) - timedelta(days=1)).isoformat(timespec="seconds")
         return {
+            "blocked": await scalar("SELECT COUNT(*) FROM users WHERE blocked_at IS NOT NULL"),
+            "blocked_ever": await scalar(
+                "SELECT COUNT(DISTINCT user_id) FROM events WHERE name = 'blocked'"
+            ),
+            "blocked_24h": await scalar(
+                "SELECT COUNT(*) FROM users WHERE blocked_at >= ?", day_ago
+            ),
             "users": await scalar("SELECT COUNT(*) FROM users"),
             "started": await scalar("SELECT COUNT(DISTINCT user_id) FROM sessions"),
             "finished": await scalar(users_with.format("finished_at")),
@@ -353,10 +390,7 @@ class Database:
                 """SELECT COUNT(DISTINCT user_id) FROM sessions
                    WHERE gate_shown_at IS NOT NULL AND unlocked_at IS NOT NULL"""
             ),
-            "users_24h": await scalar(
-                "SELECT COUNT(*) FROM users WHERE created_at >= ?",
-                (datetime.now(UTC) - timedelta(days=1)).isoformat(timespec="seconds"),
-            ),
+            "users_24h": await scalar("SELECT COUNT(*) FROM users WHERE created_at >= ?", day_ago),
             "by_source": await pairs(
                 """SELECT COALESCE(source, '—'), COUNT(*) FROM users
                    GROUP BY 1 ORDER BY 2 DESC LIMIT 10"""

@@ -228,7 +228,7 @@ async def test_booking_through_dispatcher():
 
 
 async def test_pin_post_publishes_and_then_edits(env):
-    dp, bot, db = env
+    dp, bot, _db = env
     await dp.feed_update(bot, msg_update("/pin_post"))
     posts = [c for c in bot.calls if isinstance(c, SendMessage) and c.chat_id == "@vanillapropsy"]
     assert len(posts) == 1
@@ -285,3 +285,34 @@ async def test_start_book_deep_link_opens_booking():
         await db.close()
         router._parent_router = None
         booking_router._parent_router = None
+
+
+def block_update(blocked: bool, chat: Chat = CHAT) -> Update:
+    from aiogram.types import ChatMemberBanned, ChatMemberMember, ChatMemberUpdated
+
+    member = ChatMemberMember(user=BOT_USER)
+    banned = ChatMemberBanned(user=BOT_USER, until_date=0)
+    old, new = (member, banned) if blocked else (banned, member)
+    return Update(update_id=next(_ids), my_chat_member=ChatMemberUpdated(
+        chat=chat, from_user=USER, date=datetime.now(UTC),
+        old_chat_member=old, new_chat_member=new,
+    ))
+
+
+async def test_block_and_unblock_shown_in_stats(env):
+    dp, bot, db = env
+    await dp.feed_update(bot, msg_update("/start"))
+    await dp.feed_update(bot, block_update(True))
+    assert (await db.stats())["blocked"] == 1
+
+    await dp.feed_update(bot, block_update(False))
+    await dp.feed_update(bot, msg_update("/stats"))
+    text = bot.calls[-1].text
+    assert "Заблокировали бота: 0" in text and "вернулись: 1" in text
+
+
+async def test_channel_membership_changes_not_counted(env):
+    dp, bot, db = env
+    channel = Chat(id=-100, type="channel", title="c")
+    await dp.feed_update(bot, block_update(True, chat=channel))
+    assert (await db.stats())["blocked"] == 0
