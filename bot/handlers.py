@@ -287,11 +287,12 @@ def is_admin(user: User | None, config: Config) -> bool:
 
 
 def blocked_line(s: dict[str, object]) -> str:
+    """Всего за всё время; разблокировавшие тоже входят в число и показаны отдельно."""
     blocked, ever, users = s["blocked"], s["blocked_ever"], s["users"]
     assert isinstance(blocked, int) and isinstance(ever, int) and isinstance(users, int)
-    line = f"Заблокировали бота: {blocked} ({pct(blocked, users)}, за 24 ч: {s['blocked_24h']})"
+    line = f"Заблокировали бота: {ever} ({pct(ever, users)})"
     if ever > blocked:
-        line += f", вернулись: {ever - blocked}"
+        line += f", из них вернулись: {ever - blocked}"
     return line
 
 

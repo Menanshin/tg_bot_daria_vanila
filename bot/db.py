@@ -368,9 +368,6 @@ class Database:
             "blocked_ever": await scalar(
                 "SELECT COUNT(DISTINCT user_id) FROM events WHERE name = 'blocked'"
             ),
-            "blocked_24h": await scalar(
-                "SELECT COUNT(*) FROM users WHERE blocked_at >= ?", day_ago
-            ),
             "users": await scalar("SELECT COUNT(*) FROM users"),
             "started": await scalar("SELECT COUNT(DISTINCT user_id) FROM sessions"),
             "finished": await scalar(users_with.format("finished_at")),

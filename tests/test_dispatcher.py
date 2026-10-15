@@ -308,7 +308,13 @@ async def test_block_and_unblock_shown_in_stats(env):
     await dp.feed_update(bot, block_update(False))
     await dp.feed_update(bot, msg_update("/stats"))
     text = bot.calls[-1].text
-    assert "Заблокировали бота: 0" in text and "вернулись: 1" in text
+    assert "Заблокировали бота: 1 (100%), из них вернулись: 1" in text
+
+
+async def test_blocked_line_shown_with_zero(env):
+    dp, bot, _db = env
+    await dp.feed_update(bot, msg_update("/stats"))
+    assert "Заблокировали бота: 0 (—)" in bot.calls[-1].text
 
 
 async def test_channel_membership_changes_not_counted(env):

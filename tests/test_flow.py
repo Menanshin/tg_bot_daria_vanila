@@ -277,7 +277,7 @@ async def test_blocked_counted_once_and_unblock(db):
     await db.set_blocked(1, True)
     await db.set_blocked(1, True)  # повторная ошибка отправки не плодит событий
     s = await db.stats()
-    assert (s["blocked"], s["blocked_ever"], s["blocked_24h"]) == (1, 1, 1)
+    assert (s["blocked"], s["blocked_ever"]) == (1, 1)
     await db.set_blocked(1, False)
     s = await db.stats()
     assert (s["blocked"], s["blocked_ever"]) == (0, 1)
