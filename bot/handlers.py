@@ -127,7 +127,7 @@ async def on_menu(
     db: Database, content: Content, config: Config, bot: Bot,
 ) -> None:
     section, user = callback_data.section, cb.from_user
-    if section not in (ui.ABOUT, ui.REVIEWS) or cb.message is None:
+    if section not in ui.SECTIONS or cb.message is None:
         await cb.answer()
         return
     await db.upsert_user(user.id, user.username, None)
@@ -135,6 +135,12 @@ async def on_menu(
     await cb.answer()
     if section == ui.REVIEWS:
         await delivery.send_reviews(bot, user.id, content, config)
+        return
+    if section == ui.COURSE:
+        await delivery.send_course(bot, user.id, content)
+        return
+    if section == ui.COURSE_REVIEWS:
+        await delivery.send_course_reviews(bot, user.id, content)
         return
     text, kb = ui.about_screen(
         content, config.channel_url, config.booking_enabled, config.contact
@@ -315,6 +321,8 @@ async def stats_text(db: Database) -> str:
         f"Получили дневник: {s['diary_sent']}",
         f"Открыли «Кто такая Дарья?»: {s['about_opened']}",
         f"Открыли отзывы: {s['reviews_opened']}",
+        f"Открыли курс: {s['course_opened']}",
+        f"Открыли отзывы о курсе: {s['course_reviews_opened']}",
         blocked_line(s),
         "",
         "<b>Источники</b> (/start &lt;метка&gt;)",

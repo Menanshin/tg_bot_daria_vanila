@@ -13,7 +13,7 @@ from typing import Any
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError, TelegramForbiddenError
-from aiogram.types import FSInputFile, Message
+from aiogram.types import FSInputFile, InputMediaPhoto, Message
 
 from bot import ui
 from bot.config import Config
@@ -76,6 +76,40 @@ async def send_reviews(bot: Bot, chat_id: int, content: Content, config: Config)
     sent = await bot.send_photo(chat_id, _input(path), caption=caption, reply_markup=kb)
     if isinstance(sent, Message) and sent.photo:
         _remember(path, sent.photo[-1].file_id)
+
+
+async def _send_photo(bot: Bot, chat_id: int, path: Path, **kwargs: Any) -> None:
+    sent = await bot.send_photo(chat_id, _input(path), **kwargs)
+    if isinstance(sent, Message) and sent.photo:
+        _remember(path, sent.photo[-1].file_id)
+
+
+async def send_course(bot: Bot, chat_id: int, content: Content) -> None:
+    """Картинка курса, под ней текст с кнопками (текст длиннее лимита подписи в 1024)."""
+    try:
+        await _send_photo(bot, chat_id, content.course_path)
+    except TelegramForbiddenError:
+        raise
+    except TelegramAPIError:
+        log.exception("Failed to send course image")
+    text, kb = ui.course_screen(content)
+    await bot.send_message(chat_id, text, reply_markup=kb, disable_web_page_preview=True)
+
+
+async def send_course_reviews(bot: Bot, chat_id: int, content: Content) -> None:
+    """Одна картинка — с подписью и кнопкой; несколько — альбом, затем текст с кнопкой."""
+    paths = content.course_review_paths
+    caption, kb = ui.course_reviews_screen(content)
+    if len(paths) == 1:
+        await _send_photo(bot, chat_id, paths[0], caption=caption, reply_markup=kb)
+        return
+    sent = await bot.send_media_group(
+        chat_id, [InputMediaPhoto(media=_input(p)) for p in paths]
+    )
+    for path, msg in zip(paths, sent or [], strict=False):
+        if isinstance(msg, Message) and msg.photo:
+            _remember(path, msg.photo[-1].file_id)
+    await bot.send_message(chat_id, caption, reply_markup=kb, disable_web_page_preview=True)
 
 
 async def send_diary(bot: Bot, chat_id: int, content: Content) -> None:

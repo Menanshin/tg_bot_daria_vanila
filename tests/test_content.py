@@ -6,6 +6,8 @@ from bot.content import load_content
 from bot.scoring import AttachmentType
 from bot.ui import (
     about_screen,
+    course_reviews_screen,
+    course_screen,
     final_cta_screen,
     full_screen,
     gate_screen,
@@ -43,6 +45,8 @@ def _all_screens():
     yield start_screen(CONTENT)
     yield quiz_intro_text(CONTENT), InlineKeyboardMarkup(inline_keyboard=[])
     yield about_screen(CONTENT, CHANNEL_URL, booking=True)
+    yield course_screen(CONTENT)
+    yield course_reviews_screen(CONTENT)
     yield final_cta_screen(CONTENT, "someone", CHANNEL_URL)
     for i in range(len(CONTENT.questions)):
         yield question_screen(CONTENT, 999_999_999, i)
@@ -103,17 +107,18 @@ def test_start_screen_has_author_signature():
 
 def test_start_screen_buttons():
     from bot.booking_ui import BookMenuCb
-    from bot.ui import ABOUT, MenuCb, StartCb
+    from bot.ui import ABOUT, COURSE, MenuCb, StartCb
 
-    about = MenuCb(section=ABOUT).pack()
+    about, course = MenuCb(section=ABOUT).pack(), MenuCb(section=COURSE).pack()
 
     _, kb = start_screen(CONTENT)
     assert [[b.callback_data for b in row] for row in kb.inline_keyboard] == [
-        [StartCb().pack()], [about],
+        [StartCb().pack()], [course], [about],
     ]
 
     _, kb = start_screen(CONTENT, booking=True)
-    test_btn, book_btn, about_btn = (row[0] for row in kb.inline_keyboard)
+    test_btn, book_btn, course_btn, about_btn = (row[0] for row in kb.inline_keyboard)
+    assert course_btn.text == CONTENT.t("course_button")
     assert test_btn.text == CONTENT.t("start_button")
     assert test_btn.callback_data == StartCb().pack()
     assert book_btn.text == CONTENT.t("book_button")
@@ -153,3 +158,29 @@ def test_about_has_booking_and_reviews():
     data = [btn.callback_data for row in kb.inline_keyboard for btn in row]
     assert BookMenuCb().pack() in data
     assert MenuCb(section=REVIEWS).pack() in data
+
+
+def test_course_screens():
+    from bot.ui import COURSE, COURSE_REVIEWS, MenuCb
+
+    start_data = [b.callback_data for row in start_screen(CONTENT)[1].inline_keyboard for b in row]
+    assert MenuCb(section=COURSE).pack() in start_data
+
+    _, kb = course_screen(CONTENT)
+    assert kb.inline_keyboard[0][0].url == CONTENT.t("course_url")
+    assert kb.inline_keyboard[1][0].callback_data == MenuCb(section=COURSE_REVIEWS).pack()
+
+    caption, kb = course_reviews_screen(CONTENT)
+    assert len(caption) <= CAPTION_LIMIT
+    assert kb.inline_keyboard[0][0].url == CONTENT.t("course_url")
+    assert CONTENT.course_path.is_file() and CONTENT.course_review_paths
+
+
+def test_course_button_hidden_when_empty():
+    from dataclasses import replace
+
+    from bot.ui import COURSE, MenuCb
+
+    off = replace(CONTENT, texts={**CONTENT.texts, "course_button": ""})
+    data = [b.callback_data for row in start_screen(off)[1].inline_keyboard for b in row]
+    assert MenuCb(section=COURSE).pack() not in data

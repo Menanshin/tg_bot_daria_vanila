@@ -30,10 +30,16 @@ REQUIRED_TEXTS = (
     "book_remind_hour", "book_unavailable",
     # закреп в канале
     "channel_post", "channel_post_book_button", "channel_post_bot_button",
+    # курс
+    "course_button", "course_url", "course_join_button", "course_reviews_button",
+    "course", "course_reviews",
 )
 MEDIA_DIR_NAME = "media"
 DIARY_FILE = "diary.pdf"
 REVIEWS_FILE = "reviews.jpg"
+COURSE_FILE = "course.jpg"
+COURSE_REVIEWS_GLOB = "course_review_*.jpg"
+MAX_ALBUM = 10  # больше в один альбом Telegram не берёт
 
 
 class ContentError(ValueError):
@@ -73,6 +79,18 @@ class Content:
     @property
     def reviews_path(self) -> Path:
         return self.media_dir / REVIEWS_FILE
+
+    @property
+    def course_path(self) -> Path:
+        return self.media_dir / COURSE_FILE
+
+    @property
+    def course_review_paths(self) -> list[Path]:
+        return sorted(self.media_dir.glob(COURSE_REVIEWS_GLOB))
+
+    @property
+    def course_enabled(self) -> bool:
+        return bool(self.texts.get("course_button", "").strip())
 
     def t(self, key: str, **kwargs: Any) -> str:
         return self.texts[key].format(**kwargs).strip()
@@ -127,11 +145,16 @@ def load_content(content_dir: Path = CONTENT_DIR) -> Content:
 
     media_dir = content_dir / MEDIA_DIR_NAME
     expected = [media_dir / f"{t.value}.jpg" for t in AttachmentType] + [
-        media_dir / DIARY_FILE, media_dir / REVIEWS_FILE,
+        media_dir / DIARY_FILE, media_dir / REVIEWS_FILE, media_dir / COURSE_FILE,
     ]
     absent = [p.name for p in expected if not p.is_file()]
     if absent:
         raise ContentError(f"content/{MEDIA_DIR_NAME}: missing files {absent}")
+    n_reviews = len(list(media_dir.glob(COURSE_REVIEWS_GLOB)))
+    if not 1 <= n_reviews <= MAX_ALBUM:
+        raise ContentError(
+            f"content/{MEDIA_DIR_NAME}: need 1–{MAX_ALBUM} {COURSE_REVIEWS_GLOB}, got {n_reviews}"
+        )
 
     return Content(
         questions=questions,

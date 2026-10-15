@@ -51,6 +51,7 @@ def make_bot(status: ChatMemberStatus):
     bot.send_message = AsyncMock()
     bot.send_photo = AsyncMock()
     bot.send_document = AsyncMock()
+    bot.send_media_group = AsyncMock(return_value=[])
     return bot
 
 
@@ -261,6 +262,30 @@ async def test_menu_reviews_sends_photo(db, config):
     kb = bot.send_photo.call_args.kwargs["reply_markup"]
     assert kb.inline_keyboard[-1][0].url == config.channel_url
     assert (await db.stats())["reviews_opened"] == 1
+
+
+async def test_menu_course_sends_photo_then_text(db, config):
+    bot = make_bot(ChatMemberStatus.LEFT)
+    cb = make_cb()
+    await handlers.on_menu(cb, ui.MenuCb(section=ui.COURSE), db, CONTENT, config, bot)
+    bot.send_photo.assert_awaited_once()
+    assert bot.send_message.call_args.args[1] == CONTENT.t("course")
+    kb = bot.send_message.call_args.kwargs["reply_markup"]
+    assert kb.inline_keyboard[0][0].url == CONTENT.t("course_url")
+    assert (await db.stats())["course_opened"] == 1
+
+
+async def test_menu_course_reviews(db, config):
+    bot = make_bot(ChatMemberStatus.LEFT)
+    cb = make_cb()
+    await handlers.on_menu(cb, ui.MenuCb(section=ui.COURSE_REVIEWS), db, CONTENT, config, bot)
+    if len(CONTENT.course_review_paths) == 1:
+        kb = bot.send_photo.call_args.kwargs["reply_markup"]
+    else:
+        bot.send_media_group.assert_awaited_once()
+        kb = bot.send_message.call_args.kwargs["reply_markup"]
+    assert kb.inline_keyboard[0][0].url == CONTENT.t("course_url")
+    assert (await db.stats())["course_reviews_opened"] == 1
 
 
 async def test_menu_unknown_section_ignored(db, config):

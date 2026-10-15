@@ -48,10 +48,12 @@ class StatsCb(CallbackData, prefix="st"):
 
 
 class MenuCb(CallbackData, prefix="m"):
-    section: str  # about | reviews
+    section: str  # about | reviews | course | course_reviews
 
 
 ABOUT, REVIEWS = "about", "reviews"
+COURSE, COURSE_REVIEWS = "course", "course_reviews"
+SECTIONS = (ABOUT, REVIEWS, COURSE, COURSE_REVIEWS)
 
 
 STATS_BUTTON = "📊 Статистика"
@@ -93,12 +95,14 @@ def booking_row(content: Content, booking: bool, contact: str) -> list[list[Inli
 def start_screen(
     content: Content, booking: bool = False, contact: str = ""
 ) -> tuple[str, InlineKeyboardMarkup]:
-    """Приветствие: тест, онлайн-запись, «Кто такая Дарья?»."""
+    """Приветствие: тест, онлайн-запись, курс (если включён), «Кто такая Дарья?»."""
     rows = [
         [InlineKeyboardButton(text=content.t("start_button"), callback_data=StartCb().pack())],
         *booking_row(content, booking, contact),
-        [_menu_button(content, ABOUT)],
     ]
+    if content.course_enabled:
+        rows.append([_menu_button(content, COURSE)])
+    rows.append([_menu_button(content, ABOUT)])
     kb = InlineKeyboardMarkup(inline_keyboard=rows)
     text = content.t("start")
     # Подпись автора бота — необязательная: удали строку author в texts.yaml, и её не будет.
@@ -126,6 +130,26 @@ def reviews_screen(
         subscribe_row(content, channel_url),
     ])
     return content.t("reviews"), kb
+
+
+def course_join_row(content: Content) -> list[InlineKeyboardButton]:
+    return [InlineKeyboardButton(text=content.t("course_join_button"), url=content.t("course_url"))]
+
+
+def course_screen(content: Content) -> tuple[str, InlineKeyboardMarkup]:
+    """Текст под картинкой курса: «Хочу на курс» и «Отзывы»."""
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        course_join_row(content),
+        [_menu_button(content, COURSE_REVIEWS)],
+    ])
+    return content.t("course"), kb
+
+
+def course_reviews_screen(content: Content) -> tuple[str, InlineKeyboardMarkup]:
+    """Подпись под отзывами о курсе с кнопкой «Хочу на курс»."""
+    return content.t("course_reviews"), InlineKeyboardMarkup(
+        inline_keyboard=[course_join_row(content)]
+    )
 
 
 def quiz_intro_text(content: Content) -> str:

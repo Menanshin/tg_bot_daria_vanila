@@ -383,6 +383,12 @@ class Database:
             "reviews_opened": await scalar(
                 "SELECT COUNT(DISTINCT user_id) FROM events WHERE name = 'reviews_opened'"
             ),
+            "course_opened": await scalar(
+                "SELECT COUNT(DISTINCT user_id) FROM events WHERE name = 'course_opened'"
+            ),
+            "course_reviews_opened": await scalar(
+                "SELECT COUNT(DISTINCT user_id) FROM events WHERE name = 'course_reviews_opened'"
+            ),
             "unlocked_via_gate": await scalar(
                 """SELECT COUNT(DISTINCT user_id) FROM sessions
                    WHERE gate_shown_at IS NOT NULL AND unlocked_at IS NOT NULL"""
