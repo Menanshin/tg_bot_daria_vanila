@@ -336,3 +336,41 @@ async def test_migration_adds_blocked_column(tmp_path):
         assert (await old.stats())["blocked"] == 1
     finally:
         await old.close()
+
+
+async def test_course_deep_link_opens_course(db, config):
+    bot = make_bot(ChatMemberStatus.LEFT)
+    message = MagicMock(spec=Message)
+    message.from_user = SimpleNamespace(id=USER_ID, username="u")
+    await handlers.cmd_start_course(message, db, CONTENT, config, bot)
+    bot.send_photo.assert_awaited_once()
+    assert bot.send_message.call_args.args[1] == CONTENT.t("course")
+    assert (await db.stats())["course_opened"] == 1
+
+
+async def test_course_post_preview_then_publish(config):
+    bot = make_bot(ChatMemberStatus.LEFT)
+    admin = next(iter(config.admin_ids))
+    message = MagicMock(spec=Message)
+    message.from_user = SimpleNamespace(id=admin, username="a")
+    message.chat = SimpleNamespace(id=admin)
+    message.answer = AsyncMock()
+    await handlers.cmd_course_post(message, CONTENT, config, bot)
+    assert bot.send_photo.call_args.args[0] == admin
+    kb = bot.send_photo.call_args.kwargs["reply_markup"]
+    assert kb.inline_keyboard[0][0].url == "https://t.me/quiz_bot?start=course"
+    assert kb.inline_keyboard[1][0].url == CONTENT.t("course_url")
+
+    cb = make_cb()
+    cb.from_user = SimpleNamespace(id=admin, username="a")
+    await handlers.on_course_post_publish(cb, CONTENT, config, bot)
+    assert bot.send_photo.call_args.args[0] == config.channel
+    assert bot.send_photo.call_args.kwargs["caption"] == CONTENT.t("course_post")
+
+
+async def test_course_post_ignored_for_non_admin(config):
+    bot = make_bot(ChatMemberStatus.LEFT)
+    cb = make_cb()
+    cb.from_user = SimpleNamespace(id=-1, username="x")
+    await handlers.on_course_post_publish(cb, CONTENT, config, bot)
+    bot.send_photo.assert_not_awaited()

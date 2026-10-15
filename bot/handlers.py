@@ -70,6 +70,21 @@ async def on_bot_unblocked(event: ChatMemberUpdated, db: Database) -> None:
 
 # --- /start ---
 
+@router.message(CommandStart(deep_link=True, magic=F.args == ui.COURSE_DEEP_LINK))
+async def cmd_start_course(
+    message: Message, db: Database, content: Content, config: Config, bot: Bot
+) -> None:
+    """t.me/<бот>?start=course — сразу экран курса (кнопка «Подробнее про курс» в постах)."""
+    user = message.from_user
+    if user is None:
+        return
+    await db.upsert_user(user.id, user.username, ui.COURSE_DEEP_LINK)
+    await db.log_event(user.id, "start")
+    await db.log_event(user.id, "course_opened")
+    await delivery.send_course(bot, user.id, content)
+    delivery.schedule_diary(bot, db, content, config, user.id)
+
+
 @router.message(CommandStart())
 async def cmd_start(
     message: Message, command: CommandObject,
@@ -423,6 +438,49 @@ async def _update_channel_post(
     sent = await bot.send_message(chat, text, reply_markup=kb, disable_web_page_preview=True)
     await db.set_setting(CHANNEL_POST_KEY, str(sent.message_id))
     return sent.message_id
+
+
+@router.message(Command("course_post"))
+async def cmd_course_post(
+    message: Message, content: Content, config: Config, bot: Bot
+) -> None:
+    """Превью поста о курсе админу; в канал — только по кнопке «Опубликовать»."""
+    if not is_admin(message.from_user, config):
+        return
+    me = await bot.me()
+    caption, kb = ui.course_post(content, me.username or "")
+    await delivery.send_photo_post(bot, message.chat.id, content.course_path, caption, kb)
+    await message.answer(
+        f"☝️ Так пост будет выглядеть в {config.channel}. Публикуем?",
+        reply_markup=ui.course_post_confirm_keyboard(),
+    )
+
+
+@router.callback_query(ui.CoursePostCb.filter())
+async def on_course_post_publish(
+    cb: CallbackQuery, content: Content, config: Config, bot: Bot
+) -> None:
+    if not is_admin(cb.from_user, config):
+        await cb.answer()
+        return
+    await cb.answer()
+    me = await bot.me()
+    caption, kb = ui.course_post(content, me.username or "")
+    chat = config.channel
+    try:
+        await delivery.send_photo_post(bot, chat, content.course_path, caption, kb)
+    except TelegramAPIError as e:
+        log.warning("course_post failed: %s", e)
+        if isinstance(cb.message, Message):
+            await cb.message.answer(
+                f"Не получилось: {html.escape(str(e))}\n\n"
+                f"Проверь, что бот — админ {chat} с правом «Публикация сообщений»."
+            )
+        return
+    if isinstance(cb.message, Message):
+        # Убираем кнопку, чтобы случайно не опубликовать второй раз.
+        with contextlib.suppress(TelegramBadRequest):
+            await cb.message.edit_text(f"Готово: пост о курсе опубликован в {chat} ✅")
 
 
 @router.callback_query(ui.StatsCb.filter())

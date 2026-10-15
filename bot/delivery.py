@@ -67,10 +67,17 @@ async def send_final_cta(bot: Bot, chat_id: int, content: Content, config: Confi
     await bot.send_message(chat_id, text, reply_markup=kb)
 
 
-async def _send_photo(bot: Bot, chat_id: int, path: Path, **kwargs: Any) -> None:
+async def _send_photo(bot: Bot, chat_id: int | str, path: Path, **kwargs: Any) -> None:
     sent = await bot.send_photo(chat_id, _input(path), **kwargs)
     if isinstance(sent, Message) and sent.photo:
         _remember(path, sent.photo[-1].file_id)
+
+
+async def send_photo_post(
+    bot: Bot, chat_id: int | str, path: Path, caption: str, kb: InlineKeyboardMarkup
+) -> None:
+    """Картинка с подписью и кнопками — для поста в канал (и его превью админу)."""
+    await _send_photo(bot, chat_id, path, caption=caption, reply_markup=kb)
 
 
 async def send_course(bot: Bot, chat_id: int, content: Content) -> None:

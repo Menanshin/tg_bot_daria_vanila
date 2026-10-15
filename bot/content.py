@@ -32,7 +32,7 @@ REQUIRED_TEXTS = (
     "channel_post", "channel_post_book_button", "channel_post_bot_button",
     # курс
     "course_button", "course_url", "course_join_button", "course_reviews_button",
-    "course", "course_reviews",
+    "course", "course_reviews", "course_post", "course_post_more_button",
 )
 MEDIA_DIR_NAME = "media"
 DIARY_FILE = "diary.pdf"

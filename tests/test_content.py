@@ -199,3 +199,11 @@ def test_course_button_hidden_when_empty():
     off = replace(CONTENT, texts={**CONTENT.texts, "course_button": ""})
     data = [b.callback_data for row in start_screen(off)[1].inline_keyboard for b in row]
     assert MenuCb(section=COURSE).pack() not in data
+
+
+def test_course_post_caption_fits():
+    from bot.ui import course_post
+
+    caption, kb = course_post(CONTENT, "some_bot")
+    assert len(caption) <= CAPTION_LIMIT
+    assert kb.inline_keyboard[0][0].text == "Подробнее про курс"

@@ -56,6 +56,10 @@ class SlideCb(CallbackData, prefix="sl"):
     i: int
 
 
+class CoursePostCb(CallbackData, prefix="cpost"):
+    pass
+
+
 class NoopCb(CallbackData, prefix="noop"):
     pass
 
@@ -295,6 +299,7 @@ def stats_keyboard() -> InlineKeyboardMarkup:
 
 BOOK_DEEP_LINK = "book"   # t.me/<бот>?start=book — сразу меню записи
 POST_DEEP_LINK = "pin"    # t.me/<бот>?start=pin — обычный старт, источник «pin» в /stats
+COURSE_DEEP_LINK = "course"  # t.me/<бот>?start=course — сразу экран курса
 
 
 def channel_post(content: Content, bot_username: str) -> tuple[str, InlineKeyboardMarkup]:
@@ -307,3 +312,19 @@ def channel_post(content: Content, bot_username: str) -> tuple[str, InlineKeyboa
     if bot_button:
         rows.append([InlineKeyboardButton(text=bot_button, url=base + POST_DEEP_LINK)])
     return content.t("channel_post"), InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def course_post(content: Content, bot_username: str) -> tuple[str, InlineKeyboardMarkup]:
+    """Пост о курсе в канал (подпись к картинке): «Подробнее» — в бота, «Хочу на курс» — ссылка."""
+    more = f"https://t.me/{bot_username}?start={COURSE_DEEP_LINK}"
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=content.t("course_post_more_button"), url=more)],
+        course_join_row(content),
+    ])
+    return content.t("course_post"), kb
+
+
+def course_post_confirm_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="📣 Опубликовать в канал", callback_data=CoursePostCb().pack())
+    ]])
