@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramForbiddenError
-from aiogram.filters import Command, StateFilter
+from aiogram.filters import Command, CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message, User
@@ -99,6 +99,19 @@ async def _menu(db: Database, content: Content, config: Config, user_id: int) ->
         content, config.client_tz,
         await db.user_bookings(user_id, now), await db.trial_used(user_id),
     )
+
+
+@router.message(CommandStart(deep_link=True, magic=F.args == "book"))
+async def cmd_start_book(
+    message: Message, db: Database, content: Content, config: Config
+) -> None:
+    """Кнопка «Записаться» из закрепа в канале: t.me/<бот>?start=book — сразу меню записи."""
+    user = message.from_user
+    if user is None:
+        return
+    await db.upsert_user(user.id, user.username, "book")
+    await db.log_event(user.id, "start")
+    await cmd_book(message, db, content, config)
 
 
 @router.message(Command("book"))

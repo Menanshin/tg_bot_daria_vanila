@@ -8,7 +8,7 @@ import logging
 import re
 
 from aiogram import Bot, F, Router
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message, User
 
@@ -309,6 +309,54 @@ async def cmd_admin(message: Message, config: Config) -> None:
     if not is_admin(message.from_user, config):
         return
     await message.answer(ADMIN_HINT, reply_markup=ui.admin_keyboard())
+
+
+CHANNEL_POST_KEY = "channel_post_id"
+
+
+@router.message(Command("pin_post"))
+async def cmd_pin_post(
+    message: Message, db: Database, content: Content, config: Config, bot: Bot
+) -> None:
+    """Опубликовать (или обновить) пост с кнопкой записи в канале и закрепить его."""
+    if not is_admin(message.from_user, config):
+        return
+    me = await bot.me()
+    text, kb = ui.channel_post(content, me.username or "")
+    chat = config.channel
+    try:
+        post_id = await _update_channel_post(bot, db, chat, text, kb)
+        await bot.pin_chat_message(chat, post_id, disable_notification=True)
+    except TelegramAPIError as e:
+        log.warning("pin_post failed: %s", e)
+        await message.answer(
+            f"Не получилось: {html.escape(str(e))}\n\n"
+            f"Проверь, что бот — админ {chat} с правами «Публикация сообщений» "
+            "и «Закрепление сообщений»."
+        )
+        return
+    await message.answer(f"Готово: пост закреплён в {chat} ✅")
+
+
+async def _update_channel_post(
+    bot: Bot, db: Database, chat: str, text: str, kb: InlineKeyboardMarkup
+) -> int:
+    """Отредактировать прежний пост, если он ещё есть; иначе опубликовать новый."""
+    old = await db.get_setting(CHANNEL_POST_KEY)
+    if old:
+        try:
+            await bot.edit_message_text(
+                text, chat_id=chat, message_id=int(old),
+                reply_markup=kb, disable_web_page_preview=True,
+            )
+            return int(old)
+        except TelegramBadRequest as e:
+            if "message is not modified" in str(e):
+                return int(old)
+            log.info("old channel post %s not editable (%s), sending a new one", old, e)
+    sent = await bot.send_message(chat, text, reply_markup=kb, disable_web_page_preview=True)
+    await db.set_setting(CHANNEL_POST_KEY, str(sent.message_id))
+    return sent.message_id
 
 
 @router.callback_query(ui.StatsCb.filter())

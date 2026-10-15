@@ -240,3 +240,21 @@ def stats_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="🔄 Обновить", callback_data=StatsCb().pack())
     ]])
+
+
+# --- закреп в канале ---
+
+BOOK_DEEP_LINK = "book"   # t.me/<бот>?start=book — сразу меню записи
+POST_DEEP_LINK = "pin"    # t.me/<бот>?start=pin — обычный старт, источник «pin» в /stats
+
+
+def channel_post(content: Content, bot_username: str) -> tuple[str, InlineKeyboardMarkup]:
+    """Пост для закрепа: кнопки ведут в бота по deep link (inline-кнопки в канале — только url)."""
+    base = f"https://t.me/{bot_username}?start="
+    rows = [[InlineKeyboardButton(
+        text=content.t("channel_post_book_button"), url=base + BOOK_DEEP_LINK
+    )]]
+    bot_button = content.t("channel_post_bot_button")
+    if bot_button:
+        rows.append([InlineKeyboardButton(text=bot_button, url=base + POST_DEEP_LINK)])
+    return content.t("channel_post"), InlineKeyboardMarkup(inline_keyboard=rows)

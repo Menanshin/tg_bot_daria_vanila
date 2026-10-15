@@ -28,6 +28,8 @@ REQUIRED_TEXTS = (
     "book_declined", "book_expired", "book_cancel_ask", "book_cancel_yes", "book_cancel_no",
     "book_cancelled", "book_cancel_too_late", "book_cancelled_by_owner", "book_remind_day",
     "book_remind_hour", "book_unavailable",
+    # закреп в канале
+    "channel_post", "channel_post_book_button", "channel_post_bot_button",
 )
 MEDIA_DIR_NAME = "media"
 DIARY_FILE = "diary.pdf"

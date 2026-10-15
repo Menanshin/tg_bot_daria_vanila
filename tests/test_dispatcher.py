@@ -9,6 +9,7 @@ from aiogram.methods import (
     EditMessageText,
     GetChatMember,
     GetMe,
+    PinChatMessage,
     SendMessage,
     TelegramMethod,
 )
@@ -49,7 +50,7 @@ class FakeBot(Bot):
             return Message(
                 message_id=1, date=datetime.now(UTC), chat=CHAT, text=method.text
             )
-        if isinstance(method, AnswerCallbackQuery):
+        if isinstance(method, AnswerCallbackQuery | PinChatMessage):
             return True
         raise AssertionError(f"unexpected call {type(method).__name__}")
 
@@ -224,3 +225,63 @@ async def test_booking_through_dispatcher():
         await db.close()
         booking_router._parent_router = None
         router._parent_router = None
+
+
+async def test_pin_post_publishes_and_then_edits(env):
+    dp, bot, db = env
+    await dp.feed_update(bot, msg_update("/pin_post"))
+    posts = [c for c in bot.calls if isinstance(c, SendMessage) and c.chat_id == "@vanillapropsy"]
+    assert len(posts) == 1
+    assert "Дарья Сорокина" in posts[0].text
+    urls = [row[0].url for row in posts[0].reply_markup.inline_keyboard]
+    assert urls[0] == "https://t.me/quiz_bot?start=book"
+    pins = [c for c in bot.calls if isinstance(c, PinChatMessage)]
+    assert pins and pins[-1].chat_id == "@vanillapropsy" and pins[-1].disable_notification
+    assert "закреплён" in bot.calls[-1].text
+
+    # Повторный вызов редактирует тот же пост, а не публикует новый.
+    await dp.feed_update(bot, msg_update("/pin_post"))
+    posts = [c for c in bot.calls if isinstance(c, SendMessage) and c.chat_id == "@vanillapropsy"]
+    assert len(posts) == 1
+    assert any(isinstance(c, EditMessageText) and c.chat_id == "@vanillapropsy" for c in bot.calls)
+
+
+async def test_pin_post_admin_only():
+    db = Database(":memory:")
+    await db.connect()
+    config = Config(
+        bot_token="x", channel="@vanillapropsy", admin_ids=frozenset(),
+        db_path=":memory:", reminder_hours=24, log_level="INFO",
+    )
+    dp = Dispatcher(db=db, content=CONTENT, config=config)
+    dp.include_router(router)
+    bot = FakeBot()
+    try:
+        await dp.feed_update(bot, msg_update("/pin_post"))
+        assert not [c for c in bot.calls if isinstance(c, SendMessage | PinChatMessage)]
+    finally:
+        await db.close()
+        router._parent_router = None
+
+
+async def test_start_book_deep_link_opens_booking():
+    from bot.booking_handlers import router as booking_router
+
+    db = Database(":memory:")
+    await db.connect()
+    config = Config(
+        bot_token="x", channel="@vanillapropsy", admin_ids=frozenset(),
+        db_path=":memory:", reminder_hours=0, log_level="INFO", booking_owner_id=999,
+    )
+    dp = Dispatcher(db=db, content=CONTENT, config=config)
+    dp.include_router(booking_router)
+    dp.include_router(router)
+    bot = FakeBot()
+    try:
+        await dp.feed_update(bot, msg_update("/start book"))
+        assert "Запись на онлайн-встречу" in bot.calls[-1].text
+        assert ("book", 1) in (await db.stats())["by_source"]
+    finally:
+        await db.close()
+        router._parent_router = None
+        booking_router._parent_router = None

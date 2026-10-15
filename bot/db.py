@@ -90,6 +90,10 @@ CREATE TABLE IF NOT EXISTS schedule_week (
     weekday     INTEGER PRIMARY KEY,
     intervals   TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS settings (
+    key         TEXT PRIMARY KEY,
+    value       TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS schedule_dates (
     day         TEXT PRIMARY KEY,
     intervals   TEXT NOT NULL
@@ -188,6 +192,19 @@ class Database:
                 ON CONFLICT(user_id) DO UPDATE SET username = excluded.username
                 """,
                 (user_id, username, source, now_iso()),
+            )
+
+    async def get_setting(self, key: str) -> str | None:
+        async with self.conn.execute("SELECT value FROM settings WHERE key = ?", (key,)) as cur:
+            row = await cur.fetchone()
+        return row["value"] if row else None
+
+    async def set_setting(self, key: str, value: str) -> None:
+        async with self.write() as conn:
+            await conn.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?)"
+                " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
             )
 
     async def log_event(self, user_id: int, name: str) -> None:
