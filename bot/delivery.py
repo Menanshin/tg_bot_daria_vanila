@@ -13,7 +13,7 @@ from typing import Any
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError, TelegramForbiddenError
-from aiogram.types import FSInputFile, InputMediaPhoto, Message
+from aiogram.types import FSInputFile, InlineKeyboardMarkup, InputMediaPhoto, Message
 
 from bot import ui
 from bot.config import Config
@@ -67,17 +67,6 @@ async def send_final_cta(bot: Bot, chat_id: int, content: Content, config: Confi
     await bot.send_message(chat_id, text, reply_markup=kb)
 
 
-async def send_reviews(bot: Bot, chat_id: int, content: Content, config: Config) -> None:
-    """Картинка с отзывами + подпись и кнопки (запись, подписка)."""
-    path = content.reviews_path
-    caption, kb = ui.reviews_screen(
-        content, config.channel_url, config.booking_enabled, config.contact
-    )
-    sent = await bot.send_photo(chat_id, _input(path), caption=caption, reply_markup=kb)
-    if isinstance(sent, Message) and sent.photo:
-        _remember(path, sent.photo[-1].file_id)
-
-
 async def _send_photo(bot: Bot, chat_id: int, path: Path, **kwargs: Any) -> None:
     sent = await bot.send_photo(chat_id, _input(path), **kwargs)
     if isinstance(sent, Message) and sent.photo:
@@ -96,20 +85,39 @@ async def send_course(bot: Bot, chat_id: int, content: Content) -> None:
     await bot.send_message(chat_id, text, reply_markup=kb, disable_web_page_preview=True)
 
 
-async def send_course_reviews(bot: Bot, chat_id: int, content: Content) -> None:
-    """Одна картинка — с подписью и кнопкой; несколько — альбом, затем текст с кнопкой."""
-    paths = content.course_review_paths
-    caption, kb = ui.course_reviews_screen(content)
-    if len(paths) == 1:
-        await _send_photo(bot, chat_id, paths[0], caption=caption, reply_markup=kb)
-        return
-    sent = await bot.send_media_group(
-        chat_id, [InputMediaPhoto(media=_input(p)) for p in paths]
+def reviews_slide(
+    content: Content, config: Config, kind: str, index: int
+) -> tuple[Path, str, InlineKeyboardMarkup]:
+    """Слайд отзывов: картинка, подпись и кнопки. kind — откуда открыли (меню или курс)."""
+    paths = content.review_paths
+    index %= len(paths)
+    if kind == ui.COURSE_REVIEWS:
+        caption, kb = ui.course_reviews_screen(content, index)
+    else:
+        caption, kb = ui.reviews_screen(
+            content, config.channel_url, config.booking_enabled, config.contact, index
+        )
+    return paths[index], caption, kb
+
+
+async def send_reviews(
+    bot: Bot, chat_id: int, content: Content, config: Config, kind: str = ui.REVIEWS
+) -> None:
+    """Первый слайд отзывов одним сообщением; дальше листается стрелками."""
+    path, caption, kb = reviews_slide(content, config, kind, 0)
+    await _send_photo(bot, chat_id, path, caption=caption, reply_markup=kb)
+
+
+async def show_slide(
+    message: Message, content: Content, config: Config, kind: str, index: int
+) -> None:
+    """Заменить картинку и кнопки в том же сообщении."""
+    path, caption, kb = reviews_slide(content, config, kind, index)
+    edited = await message.edit_media(
+        InputMediaPhoto(media=_input(path), caption=caption), reply_markup=kb
     )
-    for path, msg in zip(paths, sent or [], strict=False):
-        if isinstance(msg, Message) and msg.photo:
-            _remember(path, msg.photo[-1].file_id)
-    await bot.send_message(chat_id, caption, reply_markup=kb, disable_web_page_preview=True)
+    if isinstance(edited, Message) and edited.photo:
+        _remember(path, edited.photo[-1].file_id)
 
 
 async def send_diary(bot: Bot, chat_id: int, content: Content) -> None:

@@ -67,7 +67,7 @@ def test_media_files_present():
     for t in AttachmentType:
         assert CONTENT.type_image(t).is_file()
     assert CONTENT.diary_path.is_file()
-    assert CONTENT.reviews_path.is_file()
+    assert CONTENT.review_paths
 
 
 def test_screens_fit_telegram_limits():
@@ -172,8 +172,23 @@ def test_course_screens():
 
     caption, kb = course_reviews_screen(CONTENT)
     assert len(caption) <= CAPTION_LIMIT
-    assert kb.inline_keyboard[0][0].url == CONTENT.t("course_url")
-    assert CONTENT.course_path.is_file() and CONTENT.course_review_paths
+    assert kb.inline_keyboard[-1][0].url == CONTENT.t("course_url")
+    assert CONTENT.course_path.is_file()
+
+
+def test_review_slides_arrows():
+    from bot.ui import COURSE_REVIEWS, REVIEWS, SlideCb
+
+    n = len(CONTENT.review_paths)
+    _, kb = reviews_screen(CONTENT, CHANNEL_URL, index=0)
+    if n > 1:
+        prev, counter, nxt = kb.inline_keyboard[0]
+        assert prev.callback_data == SlideCb(kind=REVIEWS, i=n - 1).pack()
+        assert counter.text == f"1/{n}"
+        assert nxt.callback_data == SlideCb(kind=REVIEWS, i=1 % n).pack()
+        _, kb = course_reviews_screen(CONTENT, index=n - 1)
+        assert kb.inline_keyboard[0][2].callback_data == SlideCb(kind=COURSE_REVIEWS, i=0).pack()
+        assert kb.inline_keyboard[1][0].url == CONTENT.t("course_url")
 
 
 def test_course_button_hidden_when_empty():

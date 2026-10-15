@@ -36,10 +36,8 @@ REQUIRED_TEXTS = (
 )
 MEDIA_DIR_NAME = "media"
 DIARY_FILE = "diary.pdf"
-REVIEWS_FILE = "reviews.jpg"
 COURSE_FILE = "course.jpg"
-COURSE_REVIEWS_GLOB = "course_review_*.jpg"
-MAX_ALBUM = 10  # больше в один альбом Telegram не берёт
+REVIEWS_GLOB = "review_*.jpg"  # слайды отзывов, листаются стрелками
 
 
 class ContentError(ValueError):
@@ -77,16 +75,12 @@ class Content:
         return self.media_dir / DIARY_FILE
 
     @property
-    def reviews_path(self) -> Path:
-        return self.media_dir / REVIEWS_FILE
+    def review_paths(self) -> list[Path]:
+        return sorted(self.media_dir.glob(REVIEWS_GLOB))
 
     @property
     def course_path(self) -> Path:
         return self.media_dir / COURSE_FILE
-
-    @property
-    def course_review_paths(self) -> list[Path]:
-        return sorted(self.media_dir.glob(COURSE_REVIEWS_GLOB))
 
     @property
     def course_enabled(self) -> bool:
@@ -145,16 +139,13 @@ def load_content(content_dir: Path = CONTENT_DIR) -> Content:
 
     media_dir = content_dir / MEDIA_DIR_NAME
     expected = [media_dir / f"{t.value}.jpg" for t in AttachmentType] + [
-        media_dir / DIARY_FILE, media_dir / REVIEWS_FILE, media_dir / COURSE_FILE,
+        media_dir / DIARY_FILE, media_dir / COURSE_FILE,
     ]
     absent = [p.name for p in expected if not p.is_file()]
     if absent:
         raise ContentError(f"content/{MEDIA_DIR_NAME}: missing files {absent}")
-    n_reviews = len(list(media_dir.glob(COURSE_REVIEWS_GLOB)))
-    if not 1 <= n_reviews <= MAX_ALBUM:
-        raise ContentError(
-            f"content/{MEDIA_DIR_NAME}: need 1–{MAX_ALBUM} {COURSE_REVIEWS_GLOB}, got {n_reviews}"
-        )
+    if not any(media_dir.glob(REVIEWS_GLOB)):
+        raise ContentError(f"content/{MEDIA_DIR_NAME}: no {REVIEWS_GLOB}")
 
     return Content(
         questions=questions,

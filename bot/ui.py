@@ -51,6 +51,15 @@ class MenuCb(CallbackData, prefix="m"):
     section: str  # about | reviews | course | course_reviews
 
 
+class SlideCb(CallbackData, prefix="sl"):
+    kind: str  # reviews | course_reviews — от этого зависят подпись и кнопки
+    i: int
+
+
+class NoopCb(CallbackData, prefix="noop"):
+    pass
+
+
 ABOUT, REVIEWS = "about", "reviews"
 COURSE, COURSE_REVIEWS = "course", "course_reviews"
 SECTIONS = (ABOUT, REVIEWS, COURSE, COURSE_REVIEWS)
@@ -122,10 +131,25 @@ def about_screen(
     return content.t("about"), kb
 
 
+def slides_row(kind: str, index: int, total: int) -> list[list[InlineKeyboardButton]]:
+    """◀ 1/3 ▶ — листание слайдов отзывов по кругу. Один слайд — без стрелок."""
+    if total <= 1:
+        return []
+    prev, nxt = (index - 1) % total, (index + 1) % total
+    return [[
+        InlineKeyboardButton(text="◀", callback_data=SlideCb(kind=kind, i=prev).pack()),
+        InlineKeyboardButton(text=f"{index + 1}/{total}", callback_data=NoopCb().pack()),
+        InlineKeyboardButton(text="▶", callback_data=SlideCb(kind=kind, i=nxt).pack()),
+    ]]
+
+
 def reviews_screen(
-    content: Content, channel_url: str, booking: bool = False, contact: str = ""
+    content: Content, channel_url: str, booking: bool = False, contact: str = "",
+    index: int = 0,
 ) -> tuple[str, InlineKeyboardMarkup]:
+    """Подпись к слайду отзывов из главного меню: стрелки, запись, подписка."""
     kb = InlineKeyboardMarkup(inline_keyboard=[
+        *slides_row(REVIEWS, index, len(content.review_paths)),
         *booking_row(content, booking, contact),
         subscribe_row(content, channel_url),
     ])
@@ -145,11 +169,12 @@ def course_screen(content: Content) -> tuple[str, InlineKeyboardMarkup]:
     return content.t("course"), kb
 
 
-def course_reviews_screen(content: Content) -> tuple[str, InlineKeyboardMarkup]:
-    """Подпись под отзывами о курсе с кнопкой «Хочу на курс»."""
-    return content.t("course_reviews"), InlineKeyboardMarkup(
-        inline_keyboard=[course_join_row(content)]
-    )
+def course_reviews_screen(content: Content, index: int = 0) -> tuple[str, InlineKeyboardMarkup]:
+    """Те же слайды отзывов, но из раздела курса: стрелки и «Хочу на курс»."""
+    return content.t("course_reviews"), InlineKeyboardMarkup(inline_keyboard=[
+        *slides_row(COURSE_REVIEWS, index, len(content.review_paths)),
+        course_join_row(content),
+    ])
 
 
 def quiz_intro_text(content: Content) -> str:

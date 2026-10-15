@@ -279,13 +279,22 @@ async def test_menu_course_reviews(db, config):
     bot = make_bot(ChatMemberStatus.LEFT)
     cb = make_cb()
     await handlers.on_menu(cb, ui.MenuCb(section=ui.COURSE_REVIEWS), db, CONTENT, config, bot)
-    if len(CONTENT.course_review_paths) == 1:
-        kb = bot.send_photo.call_args.kwargs["reply_markup"]
-    else:
-        bot.send_media_group.assert_awaited_once()
-        kb = bot.send_message.call_args.kwargs["reply_markup"]
-    assert kb.inline_keyboard[0][0].url == CONTENT.t("course_url")
+    bot.send_photo.assert_awaited_once()
+    assert bot.send_photo.call_args.kwargs["caption"] == CONTENT.t("course_reviews")
+    kb = bot.send_photo.call_args.kwargs["reply_markup"]
+    assert kb.inline_keyboard[-1][0].url == CONTENT.t("course_url")
     assert (await db.stats())["course_reviews_opened"] == 1
+
+
+async def test_slide_switches_photo_in_place(config):
+    cb = make_cb()
+    cb.message.edit_media = AsyncMock()
+    await handlers.on_slide(cb, ui.SlideCb(kind=ui.REVIEWS, i=1), CONTENT, config)
+    media = cb.message.edit_media.call_args.args[0]
+    assert media.caption == CONTENT.t("reviews")
+    n = len(CONTENT.review_paths)
+    assert str(CONTENT.review_paths[1 % n]) in str(media.media.path)
+    cb.answer.assert_awaited_once()
 
 
 async def test_menu_unknown_section_ignored(db, config):

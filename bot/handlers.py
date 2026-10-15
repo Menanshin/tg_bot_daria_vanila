@@ -140,12 +140,36 @@ async def on_menu(
         await delivery.send_course(bot, user.id, content)
         return
     if section == ui.COURSE_REVIEWS:
-        await delivery.send_course_reviews(bot, user.id, content)
+        await delivery.send_reviews(bot, user.id, content, config, kind=ui.COURSE_REVIEWS)
         return
     text, kb = ui.about_screen(
         content, config.channel_url, config.booking_enabled, config.contact
     )
     await cb.message.answer(text, reply_markup=kb, disable_web_page_preview=True)
+
+
+@router.callback_query(ui.SlideCb.filter())
+async def on_slide(
+    cb: CallbackQuery, callback_data: ui.SlideCb, content: Content, config: Config
+) -> None:
+    """Стрелки ◀ ▶ под отзывами: та же подпись и кнопки, другая картинка."""
+    await cb.answer()
+    if callback_data.kind not in (ui.REVIEWS, ui.COURSE_REVIEWS) or not isinstance(
+        cb.message, Message
+    ):
+        return
+    try:
+        await delivery.show_slide(
+            cb.message, content, config, callback_data.kind, callback_data.i
+        )
+    except TelegramBadRequest as e:
+        if "message is not modified" not in str(e):
+            raise
+
+
+@router.callback_query(ui.NoopCb.filter())
+async def on_noop(cb: CallbackQuery) -> None:
+    await cb.answer()
 
 
 # --- прохождение ---
@@ -322,7 +346,7 @@ async def stats_text(db: Database) -> str:
         f"Открыли «Кто такая Дарья?»: {s['about_opened']}",
         f"Открыли отзывы: {s['reviews_opened']}",
         f"Открыли курс: {s['course_opened']}",
-        f"Открыли отзывы о курсе: {s['course_reviews_opened']}",
+        f"Открыли отзывы из курса: {s['course_reviews_opened']}",
         blocked_line(s),
         "",
         "<b>Источники</b> (/start &lt;метка&gt;)",
