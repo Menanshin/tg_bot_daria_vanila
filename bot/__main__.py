@@ -59,9 +59,7 @@ async def main() -> None:
         BotCommand(command="schedule", description="Моё расписание"),
     ] if config.booking_enabled else []
     admin_commands = [
-        *commands, BotCommand(command="stats", description="Статистика"),
-        BotCommand(command="pin_post", description="Закреп с записью в канале"),
-        BotCommand(command="course_post", description="Пост о курсе в канал"), *owner_commands,
+        *commands, BotCommand(command="stats", description="Статистика"), *owner_commands,
     ]
     menus = {admin_id: admin_commands for admin_id in config.admin_ids}
     if config.booking_enabled:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import html
 import logging
@@ -362,6 +363,7 @@ async def stats_text(db: Database) -> str:
         f"Открыли отзывы: {s['reviews_opened']}",
         f"Открыли курс: {s['course_opened']}",
         f"Открыли отзывы из курса: {s['course_reviews_opened']}",
+        f"Получили рассылку о курсе: {s['course_broadcast_sent']}",
         blocked_line(s),
         "",
         "<b>Источники</b> (/start &lt;метка&gt;)",
@@ -440,47 +442,53 @@ async def _update_channel_post(
     return sent.message_id
 
 
-@router.message(Command("course_post"))
-async def cmd_course_post(
-    message: Message, content: Content, config: Config, bot: Bot
+@router.message(Command("course_broadcast"))
+async def cmd_course_broadcast(
+    message: Message, db: Database, content: Content, config: Config, bot: Bot
 ) -> None:
-    """Превью поста о курсе админу; в канал — только по кнопке «Опубликовать»."""
+    """Превью рассылки о курсе админу; всем — только по кнопке «Разослать»."""
     if not is_admin(message.from_user, config):
         return
-    me = await bot.me()
-    caption, kb = ui.course_post(content, me.username or "")
-    await delivery.send_photo_post(bot, message.chat.id, content.course_path, caption, kb)
+    await delivery.send_course_broadcast(bot, message.chat.id, content)
+    n = len(await db.broadcast_recipients(delivery.BROADCAST_EVENT))
+    if not n:
+        await message.answer("☝️ Так выглядит рассылка. Получателей нет — всем уже отправлено.")
+        return
     await message.answer(
-        f"☝️ Так пост будет выглядеть в {config.channel}. Публикуем?",
-        reply_markup=ui.course_post_confirm_keyboard(),
+        f"☝️ Так выглядит рассылка. Получат: {n} (кто не заблокировал бота и ещё не получал). "
+        "Отправляем?",
+        reply_markup=ui.broadcast_confirm_keyboard(n),
     )
 
 
-@router.callback_query(ui.CoursePostCb.filter())
-async def on_course_post_publish(
-    cb: CallbackQuery, content: Content, config: Config, bot: Bot
+_broadcast_lock = asyncio.Lock()
+
+
+@router.callback_query(ui.BroadcastCb.filter())
+async def on_course_broadcast(
+    cb: CallbackQuery, db: Database, content: Content, config: Config, bot: Bot
 ) -> None:
     if not is_admin(cb.from_user, config):
         await cb.answer()
         return
-    await cb.answer()
-    me = await bot.me()
-    caption, kb = ui.course_post(content, me.username or "")
-    chat = config.channel
-    try:
-        await delivery.send_photo_post(bot, chat, content.course_path, caption, kb)
-    except TelegramAPIError as e:
-        log.warning("course_post failed: %s", e)
-        if isinstance(cb.message, Message):
-            await cb.message.answer(
-                f"Не получилось: {html.escape(str(e))}\n\n"
-                f"Проверь, что бот — админ {chat} с правом «Публикация сообщений»."
-            )
+    if _broadcast_lock.locked():
+        await cb.answer("Рассылка уже идёт", show_alert=True)
         return
-    if isinstance(cb.message, Message):
-        # Убираем кнопку, чтобы случайно не опубликовать второй раз.
-        with contextlib.suppress(TelegramBadRequest):
-            await cb.message.edit_text(f"Готово: пост о курсе опубликован в {chat} ✅")
+    await cb.answer()
+    status = cb.message if isinstance(cb.message, Message) else None
+    async with _broadcast_lock:
+        if status is not None:
+            # Убираем кнопку, чтобы не запустить второй раз.
+            with contextlib.suppress(TelegramBadRequest):
+                await status.edit_text("📣 Рассылка идёт…")
+        report = await delivery.run_course_broadcast(bot, db, content)
+    if status is not None:
+        await status.answer(
+            "Рассылка завершена ✅\n"
+            f"Отправлено: {report.sent}\n"
+            f"Заблокировали бота: {report.blocked}\n"
+            f"Ошибки: {report.failed}"
+        )
 
 
 @router.callback_query(ui.StatsCb.filter())

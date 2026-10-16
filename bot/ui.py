@@ -56,7 +56,7 @@ class SlideCb(CallbackData, prefix="sl"):
     i: int
 
 
-class CoursePostCb(CallbackData, prefix="cpost"):
+class BroadcastCb(CallbackData, prefix="bc"):
     pass
 
 
@@ -314,17 +314,19 @@ def channel_post(content: Content, bot_username: str) -> tuple[str, InlineKeyboa
     return content.t("channel_post"), InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def course_post(content: Content, bot_username: str) -> tuple[str, InlineKeyboardMarkup]:
-    """Пост о курсе в канал (подпись к картинке): «Подробнее» — в бота, «Хочу на курс» — ссылка."""
-    more = f"https://t.me/{bot_username}?start={COURSE_DEEP_LINK}"
+def course_broadcast(content: Content) -> tuple[str, InlineKeyboardMarkup]:
+    """Рассылка о курсе в личку: «Подробнее» открывает экран курса, «Хочу на курс» — ссылка."""
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=content.t("course_post_more_button"), url=more)],
+        [InlineKeyboardButton(
+            text=content.t("course_broadcast_more_button"),
+            callback_data=MenuCb(section=COURSE).pack(),
+        )],
         course_join_row(content),
     ])
-    return content.t("course_post"), kb
+    return content.t("course_broadcast"), kb
 
 
-def course_post_confirm_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="📣 Опубликовать в канал", callback_data=CoursePostCb().pack())
-    ]])
+def broadcast_confirm_keyboard(recipients: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
+        text=f"📣 Разослать ({recipients})", callback_data=BroadcastCb().pack()
+    )]])

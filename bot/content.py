@@ -32,11 +32,12 @@ REQUIRED_TEXTS = (
     "channel_post", "channel_post_book_button", "channel_post_bot_button",
     # курс
     "course_button", "course_url", "course_join_button", "course_reviews_button",
-    "course", "course_reviews", "course_post", "course_post_more_button",
+    "course", "course_reviews", "course_broadcast", "course_broadcast_more_button",
 )
 MEDIA_DIR_NAME = "media"
 DIARY_FILE = "diary.pdf"
 COURSE_FILE = "course.jpg"
+COURSE_BROADCAST_FILE = "course_broadcast.jpg"
 REVIEWS_GLOB = "review_*.jpg"  # слайды отзывов, листаются стрелками
 
 
@@ -81,6 +82,10 @@ class Content:
     @property
     def course_path(self) -> Path:
         return self.media_dir / COURSE_FILE
+
+    @property
+    def course_broadcast_path(self) -> Path:
+        return self.media_dir / COURSE_BROADCAST_FILE
 
     @property
     def course_enabled(self) -> bool:
@@ -139,7 +144,7 @@ def load_content(content_dir: Path = CONTENT_DIR) -> Content:
 
     media_dir = content_dir / MEDIA_DIR_NAME
     expected = [media_dir / f"{t.value}.jpg" for t in AttachmentType] + [
-        media_dir / DIARY_FILE, media_dir / COURSE_FILE,
+        media_dir / DIARY_FILE, media_dir / COURSE_FILE, media_dir / COURSE_BROADCAST_FILE,
     ]
     absent = [p.name for p in expected if not p.is_file()]
     if absent:

@@ -201,9 +201,10 @@ def test_course_button_hidden_when_empty():
     assert MenuCb(section=COURSE).pack() not in data
 
 
-def test_course_post_caption_fits():
-    from bot.ui import course_post
+def test_course_broadcast_caption_fits():
+    from bot.ui import course_broadcast
 
-    caption, kb = course_post(CONTENT, "some_bot")
+    caption, kb = course_broadcast(CONTENT)
     assert len(caption) <= CAPTION_LIMIT
     assert kb.inline_keyboard[0][0].text == "Подробнее про курс"
+    assert CONTENT.course_broadcast_path.is_file()

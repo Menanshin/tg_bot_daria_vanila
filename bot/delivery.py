@@ -8,11 +8,12 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Coroutine
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramAPIError, TelegramForbiddenError
+from aiogram.exceptions import TelegramAPIError, TelegramForbiddenError, TelegramRetryAfter
 from aiogram.types import FSInputFile, InlineKeyboardMarkup, InputMediaPhoto, Message
 
 from bot import ui
@@ -73,11 +74,49 @@ async def _send_photo(bot: Bot, chat_id: int | str, path: Path, **kwargs: Any) -
         _remember(path, sent.photo[-1].file_id)
 
 
-async def send_photo_post(
-    bot: Bot, chat_id: int | str, path: Path, caption: str, kb: InlineKeyboardMarkup
-) -> None:
-    """Картинка с подписью и кнопками — для поста в канал (и его превью админу)."""
-    await _send_photo(bot, chat_id, path, caption=caption, reply_markup=kb)
+BROADCAST_EVENT = "course_broadcast_sent"
+BROADCAST_PAUSE_SEC = 0.05  # ~20 сообщений в секунду, ниже лимита Telegram (30/с)
+
+
+@dataclass(slots=True)
+class BroadcastReport:
+    sent: int = 0
+    blocked: int = 0
+    failed: int = 0
+
+
+async def send_course_broadcast(bot: Bot, chat_id: int, content: Content) -> None:
+    caption, kb = ui.course_broadcast(content)
+    await _send_photo(bot, chat_id, content.course_broadcast_path, caption=caption, reply_markup=kb)
+
+
+async def run_course_broadcast(
+    bot: Bot, db: Database, content: Content, pause: float | None = None
+) -> BroadcastReport:
+    """Разослать всем, кто ещё не получил. Заблокировавших помечаем, остальных — событием."""
+    pause = BROADCAST_PAUSE_SEC if pause is None else pause
+    report = BroadcastReport()
+    for user_id in await db.broadcast_recipients(BROADCAST_EVENT):
+        for _ in range(3):
+            try:
+                await send_course_broadcast(bot, user_id, content)
+            except TelegramRetryAfter as e:
+                await asyncio.sleep(e.retry_after + 1)
+                continue
+            except TelegramForbiddenError:
+                await db.set_blocked(user_id, True)
+                report.blocked += 1
+            except TelegramAPIError as e:
+                log.warning("Broadcast to %s failed: %s", user_id, e)
+                report.failed += 1
+            else:
+                await db.log_event(user_id, BROADCAST_EVENT)
+                report.sent += 1
+            break
+        else:
+            report.failed += 1
+        await asyncio.sleep(pause)
+    return report
 
 
 async def send_course(bot: Bot, chat_id: int, content: Content) -> None:

@@ -243,6 +243,16 @@ class Database:
                 (user_id, name, now_iso()),
             )
 
+    async def broadcast_recipients(self, event: str) -> list[int]:
+        """Кто не заблокировал бота и ещё не получил рассылку event (повтор не дублирует)."""
+        async with self.conn.execute(
+            """SELECT user_id FROM users WHERE blocked_at IS NULL
+               AND user_id NOT IN (SELECT user_id FROM events WHERE name = ?)
+               ORDER BY created_at""",
+            (event,),
+        ) as cur:
+            return [row[0] for row in await cur.fetchall()]
+
     async def username(self, user_id: int) -> str | None:
         async with self.conn.execute(
             "SELECT username FROM users WHERE user_id = ?", (user_id,)
@@ -385,6 +395,9 @@ class Database:
             ),
             "course_opened": await scalar(
                 "SELECT COUNT(DISTINCT user_id) FROM events WHERE name = 'course_opened'"
+            ),
+            "course_broadcast_sent": await scalar(
+                "SELECT COUNT(DISTINCT user_id) FROM events WHERE name = 'course_broadcast_sent'"
             ),
             "course_reviews_opened": await scalar(
                 "SELECT COUNT(DISTINCT user_id) FROM events WHERE name = 'course_reviews_opened'"

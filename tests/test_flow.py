@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from aiogram.enums import ChatMemberStatus
@@ -348,29 +348,60 @@ async def test_course_deep_link_opens_course(db, config):
     assert (await db.stats())["course_opened"] == 1
 
 
-async def test_course_post_preview_then_publish(config):
-    bot = make_bot(ChatMemberStatus.LEFT)
-    admin = next(iter(config.admin_ids))
+def _admin_message(admin: int) -> MagicMock:
     message = MagicMock(spec=Message)
     message.from_user = SimpleNamespace(id=admin, username="a")
     message.chat = SimpleNamespace(id=admin)
     message.answer = AsyncMock()
-    await handlers.cmd_course_post(message, CONTENT, config, bot)
-    assert bot.send_photo.call_args.args[0] == admin
+    return message
+
+
+async def test_course_broadcast_preview_then_send(db, config):
+    from aiogram.exceptions import TelegramForbiddenError
+    from aiogram.methods import SendPhoto
+
+    bot = make_bot(ChatMemberStatus.LEFT)
+    admin = next(iter(config.admin_ids))
+    for uid in (10, 11, 12):
+        await db.upsert_user(uid, None, None)
+    await db.set_blocked(12, True)  # заблокировал — не получит
+
+    await handlers.cmd_course_broadcast(_admin_message(admin), db, CONTENT, config, bot)
+    assert bot.send_photo.call_args.args[0] == admin  # превью — только админу
     kb = bot.send_photo.call_args.kwargs["reply_markup"]
-    assert kb.inline_keyboard[0][0].url == "https://t.me/quiz_bot?start=course"
+    assert kb.inline_keyboard[0][0].callback_data == ui.MenuCb(section=ui.COURSE).pack()
     assert kb.inline_keyboard[1][0].url == CONTENT.t("course_url")
+    assert bot.send_photo.call_args.kwargs["caption"] == CONTENT.t("course_broadcast")
+
+    bot.send_photo.reset_mock()
+
+    async def send(chat_id, *a, **kw):
+        if chat_id == 11:
+            raise TelegramForbiddenError(SendPhoto(chat_id=11, photo="x"), "blocked")
+    bot.send_photo.side_effect = send
 
     cb = make_cb()
     cb.from_user = SimpleNamespace(id=admin, username="a")
-    await handlers.on_course_post_publish(cb, CONTENT, config, bot)
-    assert bot.send_photo.call_args.args[0] == config.channel
-    assert bot.send_photo.call_args.kwargs["caption"] == CONTENT.t("course_post")
+    with patch.object(delivery, "BROADCAST_PAUSE_SEC", 0):
+        await handlers.on_course_broadcast(cb, db, CONTENT, config, bot)
+    sent_to = [c.args[0] for c in bot.send_photo.call_args_list]
+    assert 12 not in sent_to and 10 in sent_to and 11 in sent_to
+    report = cb.message.answer.call_args.args[0]
+    assert "Заблокировали бота: 1" in report
+    stats = await db.stats()
+    assert stats["course_broadcast_sent"] >= 1
+
+    # Повтор не дублирует: 10 и админ уже получили, 11 и 12 заблокировали.
+    bot.send_photo.reset_mock()
+    bot.send_photo.side_effect = None
+    await delivery.run_course_broadcast(bot, db, CONTENT, pause=0)
+    bot.send_photo.assert_not_awaited()
 
 
-async def test_course_post_ignored_for_non_admin(config):
+async def test_course_broadcast_ignored_for_non_admin(db, config):
     bot = make_bot(ChatMemberStatus.LEFT)
+    await db.upsert_user(10, None, None)
     cb = make_cb()
     cb.from_user = SimpleNamespace(id=-1, username="x")
-    await handlers.on_course_post_publish(cb, CONTENT, config, bot)
+    await handlers.on_course_broadcast(cb, db, CONTENT, config, bot)
     bot.send_photo.assert_not_awaited()
